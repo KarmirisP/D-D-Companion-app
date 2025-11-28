@@ -974,7 +974,16 @@ const CharacterCard = ({ char, printerMode, updateCharacter, deleteCharacter, cl
             )}
           </div>
           <div>
-            <h3 className={`font-bold text-lg ${printerMode ? 'text-black' : 'text-white'}`}>{char.name}</h3>
+            {isEditing ? (
+              <input 
+                type="text"
+                className="font-bold text-lg bg-slate-900 border border-slate-600 rounded px-2 py-1 text-white"
+                value={localChar.name}
+                onChange={(e) => setLocalChar({ ...localChar, name: e.target.value })}
+              />
+            ) : (
+              <h3 className={`font-bold text-lg ${printerMode ? 'text-black' : 'text-white'}`}>{char.name}</h3>
+            )}
             <div className={`text-xs ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>{char.race} {char.class}</div>
           </div>
         </div>
