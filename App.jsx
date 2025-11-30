@@ -8,7 +8,7 @@ import {
   TrendingUp, Award, Filter, Tag, Wand2, Eye, Briefcase,
   Backpack, Anchor, Activity, Target, Play, XCircle, CheckCircle, 
   Map, Moon, Sun, Coffee, Coins, UserX, Cloud, Wind, Snowflake,
-  Zap as Lightning, PlayCircle, PauseCircle, SkipForward, Gift
+  Zap as Lightning, PlayCircle, PauseCircle, SkipForward, Gift, Heart
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -23,10 +23,26 @@ import {
   getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, 
   onSnapshot, serverTimestamp, query, where 
 } from 'firebase/firestore';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 // --- Firebase Configuration ---
-const firebaseConfig = JSON.parse(__firebase_config);
+// NEW SECURE CODE:
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+};
+
 const app = initializeApp(firebaseConfig);
+if (import.meta.env.VITE_RECAPTCHA_SITE_KEY) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(import.meta.env.VITE_RECAPTCHA_SITE_KEY),
+    isTokenAutoRefreshEnabled: true
+  });
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-dnd-app';
@@ -55,12 +71,74 @@ const summarizeEncounter = (roster) => {
 
 const DICE_REGEX = /(\d+d\d+(?:\s?[+-]\s?\d+)?)/g;
 
+// --- NEW CONSTANTS FOR ENHANCED FEATURES ---
+const ALIGNMENTS = [
+  "Lawful Good", "Neutral Good", "Chaotic Good",
+  "Lawful Neutral", "True Neutral", "Chaotic Neutral",
+  "Lawful Evil", "Neutral Evil", "Chaotic Evil"
+];
+
+const BACKGROUNDS = [
+  "Acolyte", "Charlatan", "Criminal", "Entertainer", "Folk Hero",
+  "Guild Artisan", "Hermit", "Noble", "Outlander", "Sage",
+  "Sailor", "Soldier", "Urchin", "Custom"
+];
+
+const POINT_COSTS = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
+
+const RACIAL_BONUSES = {
+  "Human": { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 },
+  "Elf": { dex: 2 },
+  "Dwarf": { con: 2 },
+  "Halfling": { dex: 2 },
+  "Dragonborn": { str: 2, cha: 1 },
+  "Gnome": { int: 2 },
+  "Half-Elf": { cha: 2 },
+  "Half-Orc": { str: 2, con: 1 },
+  "Tiefling": { cha: 2, int: 1 },
+  "Aarakocra": { dex: 2, wis: 1 },
+  "Genasi": { con: 2 },
+  "Goliath": { str: 2, con: 1 },
+  "Tabaxi": { dex: 2, cha: 1 },
+  "Custom": {}
+};
+
+// Spell slots by class level
+const SPELL_SLOTS_BY_LEVEL = {
+  1: [2, 0, 0, 0, 0, 0, 0, 0, 0],
+  2: [3, 0, 0, 0, 0, 0, 0, 0, 0],
+  3: [4, 2, 0, 0, 0, 0, 0, 0, 0],
+  4: [4, 3, 0, 0, 0, 0, 0, 0, 0],
+  5: [4, 3, 2, 0, 0, 0, 0, 0, 0],
+  6: [4, 3, 3, 0, 0, 0, 0, 0, 0],
+  7: [4, 3, 3, 1, 0, 0, 0, 0, 0],
+  8: [4, 3, 3, 2, 0, 0, 0, 0, 0],
+  9: [4, 3, 3, 3, 1, 0, 0, 0, 0],
+  10: [4, 3, 3, 3, 2, 0, 0, 0, 0],
+  11: [4, 3, 3, 3, 2, 1, 0, 0, 0],
+  12: [4, 3, 3, 3, 2, 1, 0, 0, 0],
+  13: [4, 3, 3, 3, 2, 1, 1, 0, 0],
+  14: [4, 3, 3, 3, 2, 1, 1, 0, 0],
+  15: [4, 3, 3, 3, 2, 1, 1, 1, 0],
+  16: [4, 3, 3, 3, 2, 1, 1, 1, 0],
+  17: [4, 3, 3, 3, 2, 1, 1, 1, 1],
+  18: [4, 3, 3, 3, 3, 1, 1, 1, 1],
+  19: [4, 3, 3, 3, 3, 2, 1, 1, 1],
+  20: [4, 3, 3, 3, 3, 2, 2, 1, 1]
+};
 // --- Constants & Data ---
 const RACES = ["Human", "Elf", "Dwarf", "Halfling", "Dragonborn", "Gnome", "Half-Elf", "Half-Orc", "Tiefling", "Aarakocra", "Genasi", "Goliath", "Tabaxi", "Custom"];
 const CLASSES = ["Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Monk", "Paladin", "Ranger", "Rogue", "Sorcerer", "Warlock", "Wizard", "Artificer", "Custom"];
 const CONDITIONS = ["Blinded", "Charmed", "Deafened", "Frightened", "Grappled", "Incapacitated", "Invisible", "Paralyzed", "Petrified", "Poisoned", "Prone", "Restrained", "Stunned", "Unconscious"];
 const SPELL_TAGS = ["All", "Damage", "Heal", "Control", "Buff", "Utility"];
 const CASTER_CLASSES = ["Bard", "Cleric", "Druid", "Paladin", "Ranger", "Sorcerer", "Warlock", "Wizard", "Artificer"];
+
+const CLASS_SKILL_LIMITS = {
+  "Barbarian": 2, "Bard": 3, "Cleric": 2, "Druid": 2,
+  "Fighter": 2, "Monk": 2, "Paladin": 2, "Ranger": 3,
+  "Rogue": 4, "Sorcerer": 2, "Warlock": 2, "Wizard": 2,
+  "Artificer": 2, "Custom": 2
+};
 
 const SKILLS_DATA = [
   { name: "Acrobatics", stat: "dex", desc: "Stay on your feet in tricky situations, acrobatics stunts." },
@@ -84,19 +162,20 @@ const SKILLS_DATA = [
 ];
 
 const CLASS_DEFAULTS = {
-  "Barbarian": { hp: 12, saves: ["str", "con"], skills: ["Athletics", "Intimidation"], gear: ["Greataxe", "Explorers Pack"], armor: "Unarmored" },
-  "Bard": { hp: 8, saves: ["dex", "cha"], skills: ["Performance", "Persuasion", "Deception"], gear: ["Rapier", "Lute"], armor: "Leather", spells: ["Vicious Mockery", "Healing Word"] },
-  "Cleric": { hp: 8, saves: ["wis", "cha"], skills: ["Religion", "Insight"], gear: ["Mace", "Shield", "Holy Symbol"], armor: "Scale Mail", spells: ["Sacred Flame", "Cure Wounds"] },
-  "Druid": { hp: 8, saves: ["int", "wis"], skills: ["Nature", "Survival"], gear: ["Scimitar", "Wooden Shield"], armor: "Leather", spells: ["Druidcraft", "Entangle"] },
-  "Fighter": { hp: 10, saves: ["str", "con"], skills: ["Athletics", "Survival"], gear: ["Greatsword", "Crossbow"], armor: "Chain Mail" },
-  "Monk": { hp: 8, saves: ["str", "dex"], skills: ["Acrobatics", "Stealth"], gear: ["Shortsword", "Darts"], armor: "Unarmored" },
-  "Paladin": { hp: 10, saves: ["wis", "cha"], skills: ["Athletics", "Religion"], gear: ["Longsword", "Shield"], armor: "Chain Mail" },
-  "Ranger": { hp: 10, saves: ["str", "dex"], skills: ["Survival", "Stealth", "Perception"], gear: ["Longbow", "Shortswords"], armor: "Scale Mail" },
-  "Rogue": { hp: 8, saves: ["dex", "int"], skills: ["Stealth", "Sleight of Hand", "Acrobatics", "Deception"], gear: ["Shortsword", "Dagger", "Thieves Tools"], armor: "Leather" },
-  "Sorcerer": { hp: 6, saves: ["con", "cha"], skills: ["Arcana", "Persuasion"], gear: ["Dagger", "Arcane Focus"], armor: "None", spells: ["Firebolt", "Shield"] },
-  "Warlock": { hp: 8, saves: ["wis", "cha"], skills: ["Arcana", "Intimidation"], gear: ["Dagger", "Arcane Focus"], armor: "Leather", spells: ["Eldritch Blast", "Hex"] },
-  "Wizard": { hp: 6, saves: ["int", "wis"], skills: ["Arcana", "History"], gear: ["Quarterstaff", "Spellbook"], armor: "None", spells: ["Firebolt", "Magic Missile"] },
-  "Artificer": { hp: 8, saves: ["con", "int"], skills: ["Investigation", "Arcana"], gear: ["Hammer", "Scale Mail"], armor: "Scale Mail" }
+  "Barbarian": { hp: 12, saves: ["str", "con"], skills: ["Athletics", "Intimidation"], gear: ["Greataxe", "Explorers Pack"], armor: "Unarmored", spells: [] },
+  "Bard": { hp: 8, saves: ["dex", "cha"], skills: ["Performance", "Persuasion", "Deception"], gear: ["Rapier", "Lute"], armor: "Leather", spells: ["Vicious Mockery", "Healing Word", "Cure Wounds"] },
+  "Cleric": { hp: 8, saves: ["wis", "cha"], skills: ["Religion", "Insight"], gear: ["Mace", "Shield", "Holy Symbol"], armor: "Scale Mail", spells: ["Sacred Flame", "Cure Wounds", "Bless", "Guiding Bolt"] },
+  "Druid": { hp: 8, saves: ["int", "wis"], skills: ["Nature", "Survival"], gear: ["Scimitar", "Wooden Shield"], armor: "Leather", spells: ["Druidcraft", "Entangle", "Goodberry", "Healing Word"] },
+  "Fighter": { hp: 10, saves: ["str", "con"], skills: ["Athletics", "Survival"], gear: ["Greatsword", "Crossbow"], armor: "Chain Mail", spells: [] },
+  "Monk": { hp: 8, saves: ["str", "dex"], skills: ["Acrobatics", "Stealth"], gear: ["Shortsword", "Darts"], armor: "Unarmored", spells: [] },
+  "Paladin": { hp: 10, saves: ["wis", "cha"], skills: ["Athletics", "Religion"], gear: ["Longsword", "Shield"], armor: "Chain Mail", spells: ["Cure Wounds", "Bless", "Divine Favor"] },
+  "Ranger": { hp: 10, saves: ["str", "dex"], skills: ["Survival", "Stealth", "Perception"], gear: ["Longbow", "Shortswords"], armor: "Scale Mail", spells: ["Cure Wounds", "Goodberry", "Hunters Mark"] },
+  "Rogue": { hp: 8, saves: ["dex", "int"], skills: ["Stealth", "Sleight of Hand", "Acrobatics", "Deception"], gear: ["Shortsword", "Dagger", "Thieves Tools"], armor: "Leather", spells: [] },
+  "Sorcerer": { hp: 6, saves: ["con", "cha"], skills: ["Arcana", "Persuasion"], gear: ["Dagger", "Arcane Focus"], armor: "None", spells: ["Firebolt", "Shield", "Magic Missile", "Mage Armor"] },
+  "Warlock": { hp: 8, saves: ["wis", "cha"], skills: ["Arcana", "Intimidation"], gear: ["Dagger", "Arcane Focus"], armor: "Leather", spells: ["Eldritch Blast", "Hex", "Armor of Agathys"] },
+  "Wizard": { hp: 6, saves: ["int", "wis"], skills: ["Arcana", "History"], gear: ["Quarterstaff", "Spellbook"], armor: "None", spells: ["Firebolt", "Magic Missile", "Shield", "Mage Armor", "Detect Magic"] },
+  "Artificer": { hp: 8, saves: ["con", "int"], skills: ["Investigation", "Arcana"], gear: ["Hammer", "Scale Mail"], armor: "Scale Mail", spells: ["Fire Bolt", "Cure Wounds", "Identify"] },
+  "Custom": { hp: 8, saves: ["str", "dex"], skills: [], gear: [], armor: "None", spells: [] }
 };
 
 const STANDARD_DATA = {
@@ -133,7 +212,6 @@ const COMMON_TRAITS_LOOKUP = (() => {
   if (!map["Darkvision"]) map["Darkvision"] = "See in dim light within 60ft as bright light, and darkness as dim light.";
   return map;
 })();
-
 // --- FULL CAMPAIGN DATA ---
 const CAMPAIGN_MODULES = {
   "Random": {
@@ -506,1954 +584,3215 @@ const MONSTER_MANUAL = [
   { name: "Young Red Dragon", type: "Dragon", hp: 178, ac: 18, cr: "10", xp: 5900, stats: "STR +6, DEX +0, CON +5, INT +2, WIS +0, CHA +4", equipment: "Natural Armor", actions: "Multiattack: Bite (+10, 2d10+6) & 2 Claws (+10, 2d6+6). Fire Breath: 30ft cone, DC 17 DEX or 16d6 fire (recharge 5-6)." },
   { name: "Lich", type: "Undead", hp: 135, ac: 17, cr: "21", xp: 33000, stats: "STR +0, DEX +3, CON +3, INT +5, WIS +2, CHA +3", equipment: "Natural Armor, Staff, Phylactery", actions: "Paralyzing Touch: +12 to hit, 3d6 cold, DC 18 CON or paralyzed. Spellcasting: 9th level slots. Legendary Actions (3/round)." }
 ];
-
-const MONSTER_BUCKETS = {
-  Humanoid: MONSTER_MANUAL.filter(m => m.type === "Humanoid"),
-  Undead: MONSTER_MANUAL.filter(m => m.type === "Undead"),
-  Beast: MONSTER_MANUAL.filter(m => m.type === "Beast"),
-  Monstrosity: MONSTER_MANUAL.filter(m => m.type === "Monstrosity"),
-  Dragon: MONSTER_MANUAL.filter(m => m.type === "Dragon"),
-  City: MONSTER_MANUAL.filter(m => ["Humanoid", "Aberration"].includes(m.type) || ["Mimic"].includes(m.name)),
-  Wilderness: MONSTER_MANUAL.filter(m => ["Beast", "Monstrosity", "Dragon", "Giant", "Humanoid"].includes(m.type)),
-  Dungeon: MONSTER_MANUAL.filter(m => ["Undead", "Ooze", "Monstrosity", "Aberration", "Humanoid"].includes(m.type)),
-  Crypt: MONSTER_MANUAL.filter(m => ["Undead"].includes(m.type)),
-};
-
-const BIOME_PRESETS = {
-  Any: MONSTER_MANUAL.map(m => m.name),
-  City: (MONSTER_BUCKETS.City || []).map(m => m.name),
-  Wilderness: (MONSTER_BUCKETS.Wilderness || []).map(m => m.name),
-  Dungeon: (MONSTER_BUCKETS.Dungeon || []).map(m => m.name),
-  Crypt: (MONSTER_BUCKETS.Crypt || []).map(m => m.name),
-};
-
+// --- COMPREHENSIVE SPELL LIST ---
 const SPELL_COMPENDIUM = [
-  { name: "Fireball", level: 3, school: "Evocation", time: "1 Action", range: "150ft", components: "V, S, M", duration: "Instant", classes: ["Sorcerer", "Wizard"], tags: ["damage", "control"], desc: "8d6 fire damage in 20ft radius (DEX save half)." },
-  { name: "Cure Wounds", level: 1, school: "Evocation", time: "1 Action", range: "Touch", components: "V, S", duration: "Instant", classes: ["Bard", "Cleric", "Druid", "Paladin", "Ranger"], tags: ["heal"], desc: "Heal 1d8 + Mod." },
-  { name: "Healing Word", level: 1, school: "Evocation", time: "1 Bonus Action", range: "60ft", components: "V", duration: "Instant", classes: ["Bard", "Cleric", "Druid"], tags: ["heal"], desc: "Heal 1d4 + Mod at range." },
-  { name: "Magic Missile", level: 1, school: "Evocation", time: "1 Action", range: "120ft", components: "V, S", duration: "Instant", classes: ["Sorcerer", "Wizard"], tags: ["damage"], desc: "3 darts, 1d4+1 force each. Auto-hit." },
-  { name: "Shield", level: 1, school: "Abjuration", time: "Reaction", range: "Self", components: "V, S", duration: "1 Round", classes: ["Sorcerer", "Wizard"], tags: ["buff"], desc: "+5 AC until next turn. Blocks Magic Missile." },
-  { name: "Mage Hand", level: 0, school: "Conjuration", time: "1 Action", range: "30ft", components: "V, S", duration: "1 Minute", classes: ["Bard", "Sorcerer", "Warlock", "Wizard"], tags: ["utility"], desc: "Spectral hand manipulates objects." },
-  { name: "Eldritch Blast", level: 0, school: "Evocation", time: "1 Action", range: "120ft", components: "V, S", duration: "Instant", classes: ["Warlock"], tags: ["damage"], desc: "1d10 force damage beam." },
-  { name: "Haste", level: 3, school: "Transmutation", time: "1 Action", range: "30ft", components: "V, S, M", duration: "Conc, 1 min", classes: ["Sorcerer", "Wizard", "Artificer"], tags: ["buff"], desc: "Double speed, +2 AC, extra action." },
-  { name: "Counterspell", level: 3, school: "Abjuration", time: "Reaction", range: "60ft", components: "S", duration: "Instant", classes: ["Sorcerer", "Warlock", "Wizard"], tags: ["control", "utility"], desc: "Interrupt spellcasting." },
-  { name: "Revivify", level: 3, school: "Necromancy", time: "1 Action", range: "Touch", components: "V, S, M", duration: "Instant", classes: ["Cleric", "Paladin", "Ranger"], tags: ["heal"], desc: "Revive dead creature (1 min limit). 300gp diamond." },
-  { name: "Fly", level: 3, school: "Transmutation", time: "1 Action", range: "Touch", components: "V, S, M", duration: "Conc, 10 min", classes: ["Sorcerer", "Warlock", "Wizard", "Artificer"], tags: ["utility", "buff"], desc: "Target gains 60ft fly speed." },
-  { name: "Bless", level: 1, school: "Enchantment", time: "1 Action", range: "30ft", components: "V, S, M", duration: "Conc, 1 min", classes: ["Cleric", "Paladin"], tags: ["buff"], desc: "+1d4 to attacks and saves for 3 targets." },
-  { name: "Guiding Bolt", level: 1, school: "Evocation", time: "1 Action", range: "120ft", components: "V, S", duration: "1 Round", classes: ["Cleric"], tags: ["damage", "buff"], desc: "4d6 radiant. Next attack on target has advantage." },
-  { name: "Spiritual Weapon", level: 2, school: "Evocation", time: "1 Bonus Action", range: "60ft", components: "V, S", duration: "1 min", classes: ["Cleric"], tags: ["damage"], desc: "Floating weapon attacks as bonus action (1d8 + mod)." },
-  { name: "Entangle", level: 1, school: "Conjuration", time: "1 Action", range: "90ft", components: "V, S", duration: "Conc, 1 min", classes: ["Druid"], tags: ["control"], desc: "Restrain creatures in 20ft square (STR save)." },
-  { name: "Faerie Fire", level: 1, school: "Evocation", time: "1 Action", range: "60ft", components: "V", duration: "Conc, 1 min", classes: ["Bard", "Druid", "Artificer"], tags: ["buff", "utility"], desc: "Outlines enemies (Advantage to hit, no invisibility)." },
-  { name: "Goodberry", level: 1, school: "Transmutation", time: "1 Action", range: "Touch", components: "V, S, M", duration: "24 hr", classes: ["Druid", "Ranger"], tags: ["heal", "utility"], desc: "10 berries, 1 HP each. Nourishes for a day." },
-  { name: "Sleep", level: 1, school: "Enchantment", time: "1 Action", range: "90ft", components: "V, S, M", duration: "1 min", classes: ["Bard", "Sorcerer", "Wizard"], tags: ["control"], desc: "5d8 HP of creatures fall asleep (no save)." },
-  { name: "Magic Weapon", level: 2, school: "Transmutation", time: "1 Bonus Action", range: "Touch", components: "V, S", duration: "Conc, 1 hr", classes: ["Paladin", "Wizard", "Artificer"], tags: ["buff"], desc: "Weapon becomes magical, +1 to hit/damage." },
-  { name: "Firebolt", level: 0, school: "Evocation", time: "1 Action", range: "120ft", components: "V, S", duration: "Instant", classes: ["Sorcerer", "Wizard", "Artificer"], tags: ["damage"], desc: "1d10 fire damage. Cantrip." },
+  // CANTRIPS (0-level)
+  { name: "Acid Splash", level: 0, school: "Conjuration", castingTime: "1 action", range: "60 ft", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard", "Artificer"], description: "Hurl acid at 1-2 creatures. DEX save or 1d6 acid damage (scales with level)." },
+  { name: "Blade Ward", level: 0, school: "Abjuration", castingTime: "1 action", range: "Self", components: "V, S", duration: "1 round", classes: ["Bard", "Sorcerer", "Warlock", "Wizard"], description: "Resistance to bludgeoning, piercing, slashing from weapons." },
+  { name: "Chill Touch", level: 0, school: "Necromancy", castingTime: "1 action", range: "120 ft", components: "V, S", duration: "1 round", classes: ["Sorcerer", "Warlock", "Wizard"], description: "Ranged spell attack, 1d8 necrotic. Target can't regain HP until your next turn." },
+  { name: "Dancing Lights", level: 0, school: "Evocation", castingTime: "1 action", range: "120 ft", components: "V, S, M", duration: "Conc, 1 min", classes: ["Bard", "Sorcerer", "Wizard", "Artificer"], description: "Create up to 4 torch-sized lights that hover and move." },
+  { name: "Eldritch Blast", level: 0, school: "Evocation", castingTime: "1 action", range: "120 ft", components: "V, S", duration: "Instantaneous", classes: ["Warlock"], description: "Ranged spell attack, 1d10 force damage. Multiple beams at higher levels." },
+  { name: "Fire Bolt", level: 0, school: "Evocation", castingTime: "1 action", range: "120 ft", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard", "Artificer"], description: "Ranged spell attack, 1d10 fire damage. Can ignite objects." },
+  { name: "Guidance", level: 0, school: "Divination", castingTime: "1 action", range: "Touch", components: "V, S", duration: "Conc, 1 min", classes: ["Cleric", "Druid", "Artificer"], description: "Target adds 1d4 to one ability check before spell ends." },
+  { name: "Light", level: 0, school: "Evocation", castingTime: "1 action", range: "Touch", components: "V, M", duration: "1 hour", classes: ["Bard", "Cleric", "Sorcerer", "Wizard", "Artificer"], description: "Object sheds bright light 20 ft, dim 20 ft more." },
+  { name: "Mage Hand", level: 0, school: "Conjuration", castingTime: "1 action", range: "30 ft", components: "V, S", duration: "1 minute", classes: ["Bard", "Sorcerer", "Warlock", "Wizard", "Artificer"], description: "Spectral hand manipulates objects, opens doors, retrieves items (10 lbs max)." },
+  { name: "Mending", level: 0, school: "Transmutation", castingTime: "1 minute", range: "Touch", components: "V, S, M", duration: "Instantaneous", classes: ["Bard", "Cleric", "Druid", "Sorcerer", "Wizard", "Artificer"], description: "Repair single break or tear in an object." },
+  { name: "Minor Illusion", level: 0, school: "Illusion", castingTime: "1 action", range: "30 ft", components: "S, M", duration: "1 minute", classes: ["Bard", "Sorcerer", "Warlock", "Wizard"], description: "Create sound or image of object. Investigation check to disbelieve." },
+  { name: "Poison Spray", level: 0, school: "Conjuration", castingTime: "1 action", range: "10 ft", components: "V, S", duration: "Instantaneous", classes: ["Druid", "Sorcerer", "Warlock", "Wizard", "Artificer"], description: "CON save or 1d12 poison damage." },
+  { name: "Prestidigitation", level: 0, school: "Transmutation", castingTime: "1 action", range: "10 ft", components: "V, S", duration: "Up to 1 hour", classes: ["Bard", "Sorcerer", "Warlock", "Wizard", "Artificer"], description: "Minor magical trick: light candles, clean items, chill/warm, create small illusions." },
+  { name: "Produce Flame", level: 0, school: "Conjuration", castingTime: "1 action", range: "Self", components: "V, S", duration: "10 minutes", classes: ["Druid"], description: "Flame in hand for light or ranged attack (1d8 fire)." },
+  { name: "Ray of Frost", level: 0, school: "Evocation", castingTime: "1 action", range: "60 ft", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard", "Artificer"], description: "Ranged spell attack, 1d8 cold. Speed reduced by 10 ft." },
+  { name: "Sacred Flame", level: 0, school: "Evocation", castingTime: "1 action", range: "60 ft", components: "V, S", duration: "Instantaneous", classes: ["Cleric"], description: "DEX save or 1d8 radiant damage. No cover benefit." },
+  { name: "Shocking Grasp", level: 0, school: "Evocation", castingTime: "1 action", range: "Touch", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard", "Artificer"], description: "Melee spell attack, 1d8 lightning. Advantage vs metal armor. No reactions." },
+  { name: "Spare the Dying", level: 0, school: "Necromancy", castingTime: "1 action", range: "Touch", components: "V, S", duration: "Instantaneous", classes: ["Cleric", "Artificer"], description: "Stabilize dying creature at 0 HP." },
+  { name: "Thaumaturgy", level: 0, school: "Transmutation", castingTime: "1 action", range: "30 ft", components: "V", duration: "Up to 1 min", classes: ["Cleric"], description: "Minor divine effect: voice boom, flames flicker, doors slam, ground trembles." },
+  { name: "Thorn Whip", level: 0, school: "Transmutation", castingTime: "1 action", range: "30 ft", components: "V, S, M", duration: "Instantaneous", classes: ["Druid", "Artificer"], description: "Melee spell attack, 1d6 piercing. Pull creature 10 ft closer." },
+  { name: "Vicious Mockery", level: 0, school: "Enchantment", castingTime: "1 action", range: "60 ft", components: "V", duration: "Instantaneous", classes: ["Bard"], description: "WIS save or 1d4 psychic. Disadvantage on next attack." },
+
+  // 1ST LEVEL SPELLS
+  { name: "Burning Hands", level: 1, school: "Evocation", castingTime: "1 action", range: "Self (15ft cone)", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "DEX save or 3d6 fire damage, half on success." },
+  { name: "Charm Person", level: 1, school: "Enchantment", castingTime: "1 action", range: "30 ft", components: "V, S", duration: "1 hour", classes: ["Bard", "Druid", "Sorcerer", "Warlock", "Wizard"], description: "WIS save or charmed. Advantage if you're fighting it." },
+  { name: "Cure Wounds", level: 1, school: "Evocation", castingTime: "1 action", range: "Touch", components: "V, S", duration: "Instantaneous", classes: ["Bard", "Cleric", "Druid", "Paladin", "Ranger", "Artificer"], description: "Touch heals 1d8 + spellcasting modifier HP." },
+  { name: "Detect Magic", level: 1, school: "Divination", castingTime: "1 action", range: "Self", components: "V, S", duration: "Conc, 10 min", classes: ["Bard", "Cleric", "Druid", "Paladin", "Ranger", "Sorcerer", "Wizard", "Artificer"], description: "Sense magic within 30 ft, determine school of magic." },
+  { name: "Disguise Self", level: 1, school: "Illusion", castingTime: "1 action", range: "Self", components: "V, S", duration: "1 hour", classes: ["Bard", "Sorcerer", "Wizard", "Artificer"], description: "Change appearance including clothing, armor, weapons, possessions." },
+  { name: "Faerie Fire", level: 1, school: "Evocation", castingTime: "1 action", range: "60 ft", components: "V", duration: "Conc, 1 min", classes: ["Bard", "Druid", "Artificer"], description: "DEX save or outlined in light. Attacks vs target have advantage." },
+  { name: "Healing Word", level: 1, school: "Evocation", castingTime: "1 bonus action", range: "60 ft", components: "V", duration: "Instantaneous", classes: ["Bard", "Cleric", "Druid"], description: "Bonus action, heals 1d4 + modifier HP at range." },
+  { name: "Mage Armor", level: 1, school: "Abjuration", castingTime: "1 action", range: "Touch", components: "V, S, M", duration: "8 hours", classes: ["Sorcerer", "Wizard"], description: "AC becomes 13 + DEX modifier for unarmored target." },
+  { name: "Magic Missile", level: 1, school: "Evocation", castingTime: "1 action", range: "120 ft", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "3 darts, each hits automatically for 1d4+1 force damage." },
+  { name: "Shield", level: 1, school: "Abjuration", castingTime: "1 reaction", range: "Self", components: "V, S", duration: "1 round", classes: ["Sorcerer", "Wizard"], description: "Reaction: +5 AC until start of your next turn. Blocks Magic Missile." },
+  { name: "Sleep", level: 1, school: "Enchantment", castingTime: "1 action", range: "90 ft", components: "V, S, M", duration: "1 minute", classes: ["Bard", "Sorcerer", "Wizard"], description: "5d8 HP worth of creatures fall unconscious (lowest HP first)." },
+  { name: "Thunderwave", level: 1, school: "Evocation", castingTime: "1 action", range: "Self (15ft cube)", components: "V, S", duration: "Instantaneous", classes: ["Bard", "Druid", "Sorcerer", "Wizard"], description: "CON save or 2d8 thunder & pushed 10 ft. Loud 300 ft." },
+
+  // 2ND LEVEL SPELLS
+  { name: "Aid", level: 2, school: "Abjuration", castingTime: "1 action", range: "30 ft", components: "V, S, M", duration: "8 hours", classes: ["Cleric", "Paladin", "Artificer"], description: "3 creatures gain 5 temp HP and max HP increases by 5." },
+  { name: "Blur", level: 2, school: "Illusion", castingTime: "1 action", range: "Self", components: "V", duration: "Conc, 1 min", classes: ["Sorcerer", "Wizard", "Artificer"], description: "Attackers have disadvantage unless they see through illusions." },
+  { name: "Darkness", level: 2, school: "Evocation", castingTime: "1 action", range: "60 ft", components: "V, M", duration: "Conc, 10 min", classes: ["Sorcerer", "Warlock", "Wizard"], description: "15 ft sphere of magical darkness. Blocks darkvision." },
+  { name: "Hold Person", level: 2, school: "Enchantment", castingTime: "1 action", range: "60 ft", components: "V, S, M", duration: "Conc, 1 min", classes: ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"], description: "WIS save or paralyzed. Repeat save each turn." },
+  { name: "Invisibility", level: 2, school: "Illusion", castingTime: "1 action", range: "Touch", components: "V, S, M", duration: "Conc, 1 hour", classes: ["Bard", "Sorcerer", "Warlock", "Wizard", "Artificer"], description: "Target invisible until attacks/casts or concentration ends." },
+  { name: "Misty Step", level: 2, school: "Conjuration", castingTime: "1 bonus action", range: "Self", components: "V", duration: "Instantaneous", classes: ["Sorcerer", "Warlock", "Wizard"], description: "Bonus action teleport 30 ft to visible unoccupied space." },
+  { name: "Scorching Ray", level: 2, school: "Evocation", castingTime: "1 action", range: "120 ft", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "3 ranged spell attacks, each 2d6 fire damage." },
+  { name: "Spiritual Weapon", level: 2, school: "Evocation", castingTime: "1 bonus action", range: "60 ft", components: "V, S", duration: "1 minute", classes: ["Cleric"], description: "Bonus action: summon & attack with floating weapon (1d8+modifier force)." },
+  { name: "Suggestion", level: 2, school: "Enchantment", castingTime: "1 action", range: "30 ft", components: "V, M", duration: "Conc, 8 hours", classes: ["Bard", "Sorcerer", "Warlock", "Wizard"], description: "WIS save or follow reasonable-sounding suggestion." },
+
+  // 3RD LEVEL SPELLS
+  { name: "Counterspell", level: 3, school: "Abjuration", castingTime: "1 reaction", range: "60 ft", components: "S", duration: "Instantaneous", classes: ["Sorcerer", "Warlock", "Wizard"], description: "Reaction: Interrupt spell. Auto-cancel ≤3rd, check for higher." },
+  { name: "Dispel Magic", level: 3, school: "Abjuration", castingTime: "1 action", range: "120 ft", components: "V, S", duration: "Instantaneous", classes: ["Bard", "Cleric", "Druid", "Paladin", "Sorcerer", "Warlock", "Wizard", "Artificer"], description: "End spells/effects ≤3rd level automatically, check for higher." },
+  { name: "Fireball", level: 3, school: "Evocation", castingTime: "1 action", range: "150 ft", components: "V, S, M", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "20 ft sphere. DEX save or 8d6 fire, half on success." },
+  { name: "Fly", level: 3, school: "Transmutation", castingTime: "1 action", range: "Touch", components: "V, S, M", duration: "Conc, 10 min", classes: ["Sorcerer", "Warlock", "Wizard", "Artificer"], description: "Target gains 60 ft fly speed. Falls if concentration ends." },
+  { name: "Haste", level: 3, school: "Transmutation", castingTime: "1 action", range: "30 ft", components: "V, S, M", duration: "Conc, 1 min", classes: ["Sorcerer", "Wizard", "Artificer"], description: "Double speed, +2 AC, advantage DEX saves, extra action. Lethargy when ends." },
+  { name: "Lightning Bolt", level: 3, school: "Evocation", castingTime: "1 action", range: "Self (100ft line)", components: "V, S, M", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "100×5 ft line. DEX save or 8d6 lightning, half on success." },
+  { name: "Revivify", level: 3, school: "Necromancy", castingTime: "1 action", range: "Touch", components: "V, S, M (300gp diamond)", duration: "Instantaneous", classes: ["Cleric", "Paladin", "Artificer"], description: "Return creature to life that died within 1 minute. 1 HP." },
+  { name: "Speak with Dead", level: 3, school: "Necromancy", castingTime: "1 action", range: "10 ft", components: "V, S, M", duration: "10 minutes", classes: ["Bard", "Cleric"], description: "Ask corpse 5 questions. Knows only what it knew in life." },
+
+  // 4TH LEVEL SPELLS
+  { name: "Banishment", level: 4, school: "Abjuration", castingTime: "1 action", range: "60 ft", components: "V, S, M", duration: "Conc, 1 min", classes: ["Cleric", "Paladin", "Sorcerer", "Warlock", "Wizard"], description: "CHA save or sent to harmless demiplane. Permanent if native to other plane." },
+  { name: "Greater Invisibility", level: 4, school: "Illusion", castingTime: "1 action", range: "Touch", components: "V, S", duration: "Conc, 1 min", classes: ["Bard", "Sorcerer", "Wizard"], description: "Invisible even when attacking or casting." },
+  { name: "Polymorph", level: 4, school: "Transmutation", castingTime: "1 action", range: "60 ft", components: "V, S, M", duration: "Conc, 1 hour", classes: ["Bard", "Druid", "Sorcerer", "Wizard"], description: "WIS save or transform into beast of equal/lower CR. New HP pool." },
+  { name: "Wall of Fire", level: 4, school: "Evocation", castingTime: "1 action", range: "120 ft", components: "V, S, M", duration: "Conc, 1 min", classes: ["Druid", "Sorcerer", "Wizard"], description: "Wall deals 5d8 fire when entered/starts turn in it. DEX half." },
+
+  // 5TH LEVEL SPELLS
+  { name: "Cone of Cold", level: 5, school: "Evocation", castingTime: "1 action", range: "Self (60ft cone)", components: "V, S, M", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "60 ft cone. CON save or 8d8 cold, half on success." },
+  { name: "Mass Cure Wounds", level: 5, school: "Evocation", castingTime: "1 action", range: "60 ft", components: "V, S", duration: "Instantaneous", classes: ["Bard", "Cleric", "Druid"], description: "Up to 6 creatures regain 3d8 + modifier HP." },
+  { name: "Raise Dead", level: 5, school: "Necromancy", castingTime: "1 hour", range: "Touch", components: "V, S, M (500gp diamond)", duration: "Instantaneous", classes: ["Bard", "Cleric", "Paladin"], description: "Return creature dead ≤10 days. Penalties until 4 long rests." },
+  { name: "Scrying", level: 5, school: "Divination", castingTime: "10 minutes", range: "Self", components: "V, S, M", duration: "Conc, 10 min", classes: ["Bard", "Cleric", "Druid", "Warlock", "Wizard"], description: "WIS save or see/hear target on same plane. Modifiers based on knowledge." },
+  { name: "Teleportation Circle", level: 5, school: "Conjuration", castingTime: "1 minute", range: "10 ft", components: "V, M (50gp chalk)", duration: "1 round", classes: ["Bard", "Sorcerer", "Wizard"], description: "Portal to permanent circle whose sigil you know." },
+
+  // 6TH LEVEL SPELLS
+  { name: "Chain Lightning", level: 6, school: "Evocation", castingTime: "1 action", range: "150 ft", components: "V, S, M", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "Primary target DEX save or 10d8 lightning. Arcs to 3 others." },
+  { name: "Disintegrate", level: 6, school: "Transmutation", castingTime: "1 action", range: "60 ft", components: "V, S, M", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "DEX save or 10d6+40 force. Reduced to 0 = dust." },
+  { name: "Heal", level: 6, school: "Evocation", castingTime: "1 action", range: "60 ft", components: "V, S", duration: "Instantaneous", classes: ["Cleric", "Druid"], description: "Target regains 70 HP. Ends blindness, deafness, diseases." },
+  { name: "True Seeing", level: 6, school: "Divination", castingTime: "1 action", range: "Touch", components: "V, S, M (25gp ointment)", duration: "1 hour", classes: ["Bard", "Cleric", "Sorcerer", "Warlock", "Wizard"], description: "See in darkness, see invisible, detect illusions, see into Ethereal." },
+
+  // 7TH-9TH LEVEL SPELLS
+  { name: "Finger of Death", level: 7, school: "Necromancy", castingTime: "1 action", range: "60 ft", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Warlock", "Wizard"], description: "CON save or 7d8+30 necrotic. Killed target rises as zombie." },
+  { name: "Resurrection", level: 7, school: "Necromancy", castingTime: "1 hour", range: "Touch", components: "V, S, M (1000gp diamond)", duration: "Instantaneous", classes: ["Bard", "Cleric"], description: "Return creature dead ≤100 years. Restores body parts." },
+  { name: "Power Word Stun", level: 8, school: "Enchantment", castingTime: "1 action", range: "60 ft", components: "V", duration: "Instantaneous", classes: ["Bard", "Sorcerer", "Warlock", "Wizard"], description: "If target ≤150 HP, stunned. CON save each turn to end." },
+  { name: "Maze", level: 8, school: "Conjuration", castingTime: "1 action", range: "60 ft", components: "V, S", duration: "Conc, 10 min", classes: ["Wizard"], description: "Banished to demiplane labyrinth. INT check DC 20 to escape." },
+  { name: "Meteor Swarm", level: 9, school: "Evocation", castingTime: "1 action", range: "1 mile", components: "V, S", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "4 meteors, 40 ft spheres. DEX save or 20d6 fire + 20d6 bludgeoning." },
+  { name: "Power Word Kill", level: 9, school: "Enchantment", castingTime: "1 action", range: "60 ft", components: "V", duration: "Instantaneous", classes: ["Bard", "Sorcerer", "Warlock", "Wizard"], description: "If target ≤100 HP, it dies. No save." },
+  { name: "True Resurrection", level: 9, school: "Necromancy", castingTime: "1 hour", range: "Touch", components: "V, S, M (25000gp diamond)", duration: "Instantaneous", classes: ["Cleric", "Druid"], description: "Return creature dead ≤200 years. Creates new body if needed." },
+  { name: "Wish", level: 9, school: "Conjuration", castingTime: "1 action", range: "Self", components: "V", duration: "Instantaneous", classes: ["Sorcerer", "Wizard"], description: "Ultimate spell. Duplicate any spell ≤8th or create custom effect. Risk of never casting again." }
 ];
 
-const CONDITION_DESCRIPTIONS = [
-  { title: "Blinded", text: "Auto-fail sight checks. Attackers have advantage. Your attacks have disadvantage." },
-  { title: "Charmed", text: "Can't attack charmer. Charmer has social advantage." },
-  { title: "Deafened", text: "Auto-fail hearing checks." },
-  { title: "Frightened", text: "Disadv. on checks/attacks while source seen. Can't move closer." },
-  { title: "Grappled", text: "Speed 0." },
-  { title: "Incapacitated", text: "No actions or reactions." },
-  { title: "Invisible", text: "Heavily obscured. Attackers disadv. You have advantage." },
-  { title: "Paralyzed", text: "Incapacitated. Auto-fail STR/DEX saves. Attackers adv & auto-crit within 5ft." },
-  { title: "Poisoned", text: "Disadvantage on attack rolls and ability checks." },
-  { title: "Prone", text: "Crawl. Disadv. on your attacks. Attackers adv (melee) or disadv (ranged)." },
-  { title: "Restrained", text: "Speed 0. Attackers adv. You disadv. Disadv on DEX saves." },
-  { title: "Stunned", text: "Incapacitated. Auto-fail STR/DEX saves. Attackers adv." },
-  { title: "Unconscious", text: "Incapacitated. Drop items. Prone. Auto-fail saves. Attackers adv & auto-crit." },
-];
+// --- HELPER FUNCTIONS ---
 
-const RULES_SRD = {
-  basics: [
-    { title: "Turn Order", text: "Combat is divided into rounds. Each creature takes a turn in initiative order." },
-    { title: "On Your Turn", text: "Move + Action + Bonus Action (if available). Reaction once per round." },
-    { title: "Advantage/Disadv.", text: "Roll 2d20. Take higher (Adv) or lower (Dis)." },
-    { title: "Ability Checks", text: "Roll d20 + ability mod + proficiency (if trained). DM sets DC (10 easy, 15 med, 20 hard)." },
-    { title: "Advantage Sources", text: "Flanking, hiding, guiding bolt, faerie fire, help action, inspiration." },
-    { title: "Opportunity Attacks", text: "Reaction when enemy leaves your reach. One melee attack." },
-    { title: "Cover", text: "Half (+2 AC), Three-Quarters (+5 AC), Total (Can't be targeted)." },
-    { title: "Death Saves", text: "Start turn at 0 HP: Roll d20. 10+ success, <10 fail. 3 of either sets fate. Nat 20 = 1 HP." },
-  ],
-  conditions: CONDITION_DESCRIPTIONS,
-  saves: [
-    { title: "STR Save", text: "Resist push/prone/crush." },
-    { title: "DEX Save", text: "Dodge fireball/traps." },
-    { title: "CON Save", text: "Resist poison/cold. Concentration." },
-    { title: "INT Save", text: "Resist psychic/illusions." },
-    { title: "WIS Save", text: "Resist charm/fear." },
-    { title: "CHA Save", text: "Resist banishment/possession." },
-  ],
-  magic: [
-    { title: "Spell DC", text: "8 + Prof + Mod" },
-    { title: "Spell Attack", text: "d20 + Prof + Mod" },
-    { title: "Concentration", text: "Take dmg? CON save DC 10 or half dmg." },
-  ]
+// Calculate ability modifier from score
+const getModifier = (score) => {
+  return Math.floor((score - 10) / 2);
 };
 
-const XP_THRESHOLDS = {
-  1: [25, 50, 75, 100], 2: [50, 100, 150, 200], 3: [75, 150, 225, 400], 4: [125, 250, 375, 500],
-  5: [250, 500, 750, 1100], 6: [300, 600, 900, 1400], 7: [350, 750, 1100, 1700], 8: [450, 900, 1400, 2100],
-  9: [550, 1100, 1600, 2400], 10: [600, 1200, 1900, 2800], 11: [800, 1600, 2400, 3600],
-  12: [1000, 2000, 3000, 4500], 13: [1100, 2200, 3400, 5100], 14: [1250, 2500, 3800, 5700],
-  15: [1400, 2800, 4300, 6400], 16: [1600, 3200, 4800, 7200], 17: [2000, 3900, 5900, 8800],
-  18: [2100, 4200, 6300, 9500], 19: [2400, 4900, 7300, 10900], 20: [2800, 5700, 8500, 12700],
+// Calculate proficiency bonus by level
+const getProficiencyBonus = (level) => {
+  return Math.ceil(level / 4) + 1;
 };
 
-const LEVEL_XP = [
-  0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000,
-  85000, 100000, 120000, 140000, 165000, 195000, 225000,
-  265000, 305000, 355000
-];
-
-const LOOT_TABLES = {
-  minor: ["10gp", "Healing Potion", "Rope (50ft)", "Torch x5", "Rations (3 days)", "Adventurer's Pack"],
-  moderate: ["50gp", "+1 Arrow x10", "Potion of Climbing", "Scroll of Cure Wounds", "Silver Dagger", "Pearl (100gp)"],
-  major: ["250gp", "Bag of Holding", "Cloak of Protection", "Wand of Magic Missiles", "Ring of Protection", "Potion of Greater Healing x2"],
-  treasure: ["1000gp", "+1 Weapon", "Amulet of Health", "Boots of Speed", "Staff of Fire", "Gem (500gp)"]
+// Calculate Point Buy cost for a given ability score
+const getPointBuyCost = (score) => {
+  const costs = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
+  return costs[score] || 0;
 };
 
-const WEATHER_CONDITIONS = [
-  { icon: Sun, name: "Clear", effect: "Perfect traveling weather" },
-  { icon: Cloud, name: "Overcast", effect: "Dim light, -2 Perception" },
-  { icon: Cloud, name: "Light Rain", effect: "Lightly obscured, disadvantage on Perception (hearing)" },
-  { icon: Wind, name: "Heavy Rain", effect: "Heavily obscured beyond 30ft, disadvantage ranged attacks" },
-  { icon: Snowflake, name: "Snow", effect: "Difficult terrain, disadvantage on Perception" },
-  { icon: Wind, name: "Strong Wind", effect: "Disadvantage on ranged attacks, extinguish open flames" },
-  { icon: Lightning, name: "Thunderstorm", effect: "Deafening, heavily obscured, frequent lightning" }
-];
-
-const NPC_NAMES = {
-  male: ["Aldric", "Borin", "Cedric", "Dorian", "Eldon", "Finn", "Gareth", "Henrik", "Ivan", "Jorin"],
-  female: ["Aria", "Brynn", "Celia", "Diana", "Elara", "Freya", "Gwen", "Helena", "Iris", "Jenna"],
-  surnames: ["Ironfoot", "Stormwind", "Brightblade", "Darkwood", "Swiftarrow", "Stonehammer", "Goldleaf", "Silverstream", "Nightshade", "Dawnsinger"]
+// Calculate total points spent in Point Buy system
+const calculatePointsSpent = (stats) => {
+  return Object.values(stats).reduce((total, score) => total + getPointBuyCost(score), 0);
 };
 
-const NPC_TRAITS = [
-  "Honest to a fault", "Constantly nervous", "Speaks in rhymes", "Obsessed with gold",
-  "Extremely superstitious", "Has a pet rat", "Former soldier", "Secret noble",
-  "Brewing conspiracy theories", "Collector of strange trinkets", "Always hungry",
-  "Talks to themselves", "Missing an eye", "Covered in tattoos", "Never forgets a face"
-];
-
-// --- Components ---
-
-const TraitBadge = ({ trait, onClick }) => (
-  <div className="relative group inline-flex items-center px-2 py-1 border rounded text-xs mr-1 mb-1 cursor-help bg-slate-700 border-slate-600 text-slate-200"
-       onClick={onClick}>
-    <span className="font-bold">{trait.name}</span>
-    {trait.desc && (
-      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-slate-900 border border-slate-700 rounded p-2 text-xs w-64 z-50 shadow-xl">
-        {trait.desc}
-      </div>
-    )}
-  </div>
-);
-
-const ActiveMonsterCard = ({ monster, idx, onUpdateHP, onRoll, onRemove }) => {
-  const [hp, setHp] = useState(monster.currentHp ?? monster.hp);
-  const [conditions, setConditions] = useState([]);
-  const [initiative, setInitiative] = useState(monster.initiative || 0);
-
-  const changeHp = (amount) => {
-    const newHp = Math.max(0, hp + amount);
-    setHp(newHp);
-    onUpdateHP(idx, newHp);
-  };
-
-  const toggleCondition = (cond) => {
-    setConditions(prev => prev.includes(cond) ? prev.filter(c => c !== cond) : [...prev, cond]);
-  };
-
-  const actionParts = monster.actions.split('.').filter(s => s.trim().length > 0);
-
-  return (
-    <div className={`p-3 rounded border mb-2 transition-all ${hp <= 0 ? 'bg-red-900/20 border-red-800 opacity-60' : 'bg-slate-800 border-slate-700'}`}>
-      <div className="flex justify-between items-center mb-2">
-        <div className="font-bold text-white flex items-center gap-2">
-          <span className="bg-slate-700 text-xs px-2 py-0.5 rounded">#{idx + 1}</span>
-          <span>{monster.name}</span>
-          <input
-            type="number"
-            value={initiative}
-            onChange={(e) => setInitiative(parseInt(e.target.value) || 0)}
-            className="w-12 bg-slate-900 border border-slate-600 rounded px-1 text-xs text-center"
-            title="Initiative"
-          />
-        </div>
-        <div className="flex items-center space-x-1">
-          <button onClick={() => changeHp(-1)} className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-500">-1</button>
-          <button onClick={() => changeHp(-5)} className="bg-red-800 text-white text-xs px-2 py-1 rounded hover:bg-red-700">-5</button>
-          <button onClick={() => changeHp(5)} className="bg-green-600 text-white text-xs px-2 py-1 rounded hover:bg-green-500">+5</button>
-          <span className={`font-mono w-16 text-center ${hp < monster.hp / 2 ? 'text-red-400' : 'text-green-400'}`}>{hp}/{monster.hp}</span>
-          {hp <= 0 && <button onClick={() => onRemove(idx)} className="bg-slate-700 text-white text-xs px-2 py-1 rounded hover:bg-slate-600">✓</button>}
-        </div>
-      </div>
-
-      <div className="text-xs text-slate-400 mb-2">
-        AC: <span className="text-white font-bold">{monster.ac}</span> | CR: {monster.cr} | {monster.equipment && <span>Gear: {monster.equipment}</span>}
-      </div>
-
-      <div className="flex flex-wrap gap-1 mb-2">
-        {CONDITIONS.slice(0, 8).map(c => (
-          <button
-            key={c}
-            onClick={() => toggleCondition(c)}
-            className={`text-[9px] px-1.5 py-0.5 rounded transition-colors ${conditions.includes(c) ? 'bg-red-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-              }`}
-          >
-            {c.slice(0, 3)}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-1">
-        {actionParts.map((act, i) => {
-          const diceMatches = act.match(DICE_REGEX);
-          return (
-            <div key={i} className="text-xs text-slate-300 flex flex-wrap items-center gap-2 border-l-2 border-slate-600 pl-2 py-1">
-              <span className="flex-1">{act}</span>
-              {diceMatches && diceMatches.map((dmg, dIdx) => (
-                <button
-                  key={dIdx}
-                  onClick={() => onRoll(monster.name, `Action [${idx + 1}]`, 0, dmg)}
-                  className="bg-slate-700 hover:bg-slate-600 text-white px-2 py-0.5 rounded flex items-center transition-colors"
-                >
-                  <Dices size={10} className="mr-1" /> {dmg}
-                </button>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+// Apply racial bonuses to base stats
+const applyRacialBonuses = (baseStats, race) => {
+  const bonuses = RACIAL_BONUSES[race] || {};
+  const finalStats = { ...baseStats };
+  
+  Object.keys(finalStats).forEach(stat => {
+    const bonus = bonuses[stat] || 0;
+    finalStats[stat] = Math.min(20, baseStats[stat] + bonus); // Cap at 20
+  });
+  
+  return finalStats;
 };
 
-const EncounterMonsterItem = ({ monster, printerMode }) => {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className={`p-2 rounded border transition-colors cursor-pointer hover:bg-opacity-80 ${printerMode ? 'bg-gray-50 border-gray-200 hover:bg-gray-100' : 'bg-slate-800/50 border border-slate-700 hover:bg-slate-800'}`}
-      onClick={() => setExpanded(!expanded)}>
-      <div className="flex justify-between items-center">
-        <div>
-          <span className={`font-bold ${printerMode ? 'text-black' : 'text-amber-400'}`}>
-            {monster.count > 1 ? `${monster.count}× ${monster.name}` : monster.name}
-          </span>
-          <span className="text-xs opacity-50 ml-2">{monster.type} • CR {monster.cr} • {monster.xp}xp each</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className={`text-sm font-mono ${printerMode ? 'text-black' : 'text-slate-300'}`}>
-            HP: {monster.hp} | AC: {monster.ac}
-          </div>
-          {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </div>
-      </div>
-
-      {expanded && (
-        <div className={`mt-3 pt-3 border-t text-xs leading-relaxed ${printerMode ? 'border-gray-300 text-gray-800' : 'border-slate-600 text-slate-300'}`}>
-          <div className="mb-2">
-            <span className="font-bold opacity-70">Stats:</span> {monster.stats}
-          </div>
-          <div className="mb-1">
-            <span className="font-bold opacity-70">Equipment:</span> {monster.equipment || "None"}
-          </div>
-          <div>
-            <span className="font-bold text-red-400">Actions:</span> {monster.actions}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+// Get default spells for a class
+const getDefaultSpellsForClass = (className) => {
+  const classData = CLASS_DEFAULTS[className];
+  return classData?.defaultSpells || [];
 };
 
-const CharacterCard = ({ char, printerMode, updateCharacter, deleteCharacter, cloneCharacter, onFocusSpells, onRoll, onGenericRoll }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [localChar, setLocalChar] = useState(char);
-  const [expanded, setExpanded] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [showSkillPicker, setShowSkillPicker] = useState(false);
-  const [newTrait, setNewTrait] = useState({ name: "", type: "race", desc: "" });
+// Check if class is a spellcaster
+const isSpellcaster = (className) => {
+  const casters = ["Bard", "Cleric", "Druid", "Paladin", "Ranger", "Sorcerer", "Warlock", "Wizard", "Artificer"];
+  return casters.includes(className);
+};
 
-  if (!localChar.stats) localChar.stats = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+// Get spell slots for a given class and level
+const getSpellSlots = (className, level) => {
+  const slots = SPELL_SLOTS_BY_LEVEL[className];
+  if (!slots || !slots[level]) return null;
+  return slots[level];
+};
 
-  useEffect(() => { if (!isEditing) setLocalChar(char); }, [char, isEditing]);
-
-  const handleSave = () => { updateCharacter(char.id, localChar); setIsEditing(false); };
-  const handleDelete = () => {
-    if (confirmDelete) deleteCharacter(char.id);
-    else { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
+// Validate Point Buy allocation
+const validatePointBuy = (stats) => {
+  const spent = calculatePointsSpent(stats);
+  const withinBudget = spent <= 27;
+  const validRange = Object.values(stats).every(score => score >= 8 && score <= 15);
+  
+  return {
+    valid: withinBudget && validRange,
+    spent,
+    remaining: 27 - spent,
+    errors: [
+      ...(!withinBudget ? [`Over budget by ${spent - 27} points`] : []),
+      ...(!validRange ? ['All base stats must be between 8-15'] : [])
+    ]
   };
+};
 
-  const mod = (score) => Math.floor((score - 10) / 2);
-  const fmtMod = (score) => { const m = mod(score); return m >= 0 ? `+${m}` : m; };
-  const profBonus = Math.ceil(1 + (localChar.level / 4));
+// Format modifier with + or - sign
+const formatModifier = (mod) => {
+  return mod >= 0 ? `+${mod}` : `${mod}`;
+};
 
-  const getSpellStats = () => {
-    if (!CASTER_CLASSES.includes(localChar.class)) return null;
-    const abilityMap = {
-      Wizard: 'int', Artificer: 'int', Cleric: 'wis', Druid: 'wis', Ranger: 'wis',
-      Bard: 'cha', Paladin: 'cha', Sorcerer: 'cha', Warlock: 'cha'
-    };
-    const ability = abilityMap[localChar.class];
-    if (!ability) return null;
-    const score = localChar.stats[ability] || 10;
-    const m = Math.floor((score - 10) / 2);
-    return { dc: 8 + profBonus + m, atk: profBonus + m, mod: m };
+// Calculate skill bonus (ability modifier + proficiency if proficient)
+const getSkillBonus = (abilityScore, isProficient, level) => {
+  const modifier = getModifier(abilityScore);
+  const profBonus = isProficient ? getProficiencyBonus(level) : 0;
+  return modifier + profBonus;
+};
+
+// Generate random stats using 4d6 drop lowest
+const rollStats = () => {
+  const rollOneStat = () => {
+    const rolls = Array(4).fill(0).map(() => Math.floor(Math.random() * 6) + 1);
+    rolls.sort((a, b) => a - b);
+    return rolls.slice(1).reduce((sum, val) => sum + val, 0);
   };
-  const spellStats = getSpellStats();
-
-  const clickStat = (stat) => {
-    const modifier = mod(localChar.stats[stat] || 10);
-    if (onRoll) onRoll(localChar.name, `${stat.toUpperCase()} Check`, modifier);
+  
+  return {
+    str: rollOneStat(),
+    dex: rollOneStat(),
+    con: rollOneStat(),
+    int: rollOneStat(),
+    wis: rollOneStat(),
+    cha: rollOneStat()
   };
+};
 
-  const clickSave = (stat) => {
-    const isProf = localChar.proficiencies?.saves?.[stat];
-    const m = mod(localChar.stats[stat] || 10);
-    const modifier = m + (isProf ? profBonus : 0);
-    if (onRoll) onRoll(localChar.name, `${stat.toUpperCase()} Save`, modifier);
-  };
 
-  const clickSkill = (skillName) => {
-    if (isEditing) {
-      let skills = localChar.proficiencies?.skills || [];
-      if (skills.includes(skillName)) skills = skills.filter(s => s !== skillName);
-      else skills = [...skills, skillName];
-      setLocalChar({ ...localChar, proficiencies: { ...localChar.proficiencies, skills } });
-    } else {
-      const skill = SKILLS_DATA.find(s => s.name === skillName);
-      const isProf = localChar.proficiencies?.skills?.includes(skillName);
-      const modifier = mod(localChar.stats[skill.stat] || 10) + (isProf ? profBonus : 0);
-      if (onRoll) onRoll(localChar.name, `${skillName} Check`, modifier);
-    }
-  };
+// --- MAIN APP COMPONENT ---
+function App() {
+  // ========== AUTHENTICATION STATE ==========
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const clickWeapon = (weaponName) => {
-    const strMod = mod(localChar.stats.str);
-    const dexMod = mod(localChar.stats.dex);
-    const bestMod = Math.max(strMod, dexMod);
-    const hitBonus = bestMod + profBonus;
-    if (onRoll) onRoll(localChar.name, `Attack (${weaponName})`, hitBonus);
-  };
+  // ========== CAMPAIGN & MODULE STATE ==========
+  const [campaigns, setCampaigns] = useState([]);
+  const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [selectedModule, setSelectedModule] = useState("Random");
 
-  const clickSpell = (spellName) => {
-    if (spellStats) {
-      if (onRoll) onRoll(localChar.name, `Cast ${spellName}`, spellStats.atk);
-    } else {
-      if (onRoll) onRoll(localChar.name, `Cast ${spellName}`, 0);
-    }
-  };
+  // ========== CHARACTER STATE ==========
+  const [characters, setCharacters] = useState([]);
+  const [editingCharacter, setEditingCharacter] = useState(null);
+  const [showCharacterForm, setShowCharacterForm] = useState(false);
+  const [showPointBuyHelper, setShowPointBuyHelper] = useState(false);
 
-  const clickInit = () => {
-    const initMod = mod(localChar.stats.dex);
-    if (onRoll) onRoll(localChar.name, "Initiative", initMod);
-  };
+  // ========== ENCOUNTER STATE ==========
+  const [encounters, setEncounters] = useState([]);
+  const [activeEncounter, setActiveEncounter] = useState(null);
+  const [combatLog, setCombatLog] = useState([]);
+  const [round, setRound] = useState(0);
+  const [currentTurn, setCurrentTurn] = useState(0);
 
-  const clickAC = () => {
-    if (onGenericRoll) onGenericRoll(localChar.name, `Defending with AC ${localChar.ac}`, null);
-  };
+  // ========== NOTES STATE ==========
+  const [notes, setNotes] = useState([]);
+  const [currentNote, setCurrentNote] = useState("");
+  const [noteTitle, setNoteTitle] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState(null);
 
-  const toggleSave = (stat) => {
-    const saves = { ...(localChar.proficiencies?.saves || {}) };
-    saves[stat] = !saves[stat];
-    setLocalChar({ ...localChar, proficiencies: { ...localChar.proficiencies, saves } });
-  };
+  // ========== DICE ROLLER STATE ==========
+  const [diceResults, setDiceResults] = useState([]);
+  const [diceHistory, setDiceHistory] = useState([]);
 
-  const addItem = () => setLocalChar({ ...localChar, inventory: [...(localChar.inventory || []), { name: "New Item", weight: 0 }] });
-  const updateItem = (idx, field, val) => { const inv = [...(localChar.inventory || [])]; inv[idx][field] = val; setLocalChar({ ...localChar, inventory: inv }); };
-  const removeItem = (idx) => { const inv = [...(localChar.inventory || [])]; inv.splice(idx, 1); setLocalChar({ ...localChar, inventory: inv }); };
+  // ========== UI STATE ==========
+  const [activeTab, setActiveTab] = useState("campaigns");
+  const [printerMode, setPrinterMode] = useState(false);
+  const [showMonsterManual, setShowMonsterManual] = useState(false);
+  const [showSpellCompendium, setShowSpellCompendium] = useState(false);
+  const [monsterFilter, setMonsterFilter] = useState("");
+  const [spellFilter, setSpellFilter] = useState("");
+  const [spellLevelFilter, setSpellLevelFilter] = useState("all");
+  const [spellClassFilter, setSpellClassFilter] = useState("all");
 
-  const addSpell = () => setLocalChar({ ...localChar, knownSpells: [...(localChar.knownSpells || []), "New Spell"] });
-  const updateSpell = (idx, val) => { const s = [...(localChar.knownSpells || [])]; s[idx] = val; setLocalChar({ ...localChar, knownSpells: s }); };
-  const removeSpell = (idx) => { const s = [...(localChar.knownSpells || [])]; s.splice(idx, 1); setLocalChar({ ...localChar, knownSpells: s }); };
+  // ========== NEW CHARACTER FORM STATE ==========
+  const [newCharacter, setNewCharacter] = useState({
+    name: "",
+    race: "Human",
+    class: "Fighter",
+    level: 1,
+    background: "Soldier",
+    alignment: "Lawful Good",
+    stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+    baseStats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }, // For Point Buy
+    hp: 10,
+    maxHp: 10,
+    tempHp: 0,
+    ac: 10,
+    speed: 30,
+    initiative: 0,
+    proficiencyBonus: 2,
+    skills: [],
+    equipment: [],
+    spells: [],
+    features: [],
+    notes: "",
+    xp: 0,
+    portraitUrl: "",
+    personalityTraits: "",
+    ideals: "",
+    bonds: "",
+    flaws: "",
+    inspiration: false,
+    deathSaves: { successes: 0, failures: 0 },
+    exhaustion: 0,
+    spellSlots: {},
+    currentSpellSlots: {},
+    attunedItems: [],
+    useMilestones: false
+  });
 
-  const getSaveVal = (stat) => {
-    const isProf = localChar.proficiencies?.saves?.[stat];
-    const val = mod(localChar.stats[stat] || 10) + (isProf ? profBonus : 0);
-    return val >= 0 ? `+${val}` : val;
-  };
-
-  const getPassive = (skillName) => {
-    const skill = SKILLS_DATA.find(s => s.name === skillName);
-    const statMod = mod(localChar.stats[skill.stat] || 10);
-    const isProf = localChar.proficiencies?.skills?.includes(skillName);
-    return 10 + statMod + (isProf ? profBonus : 0);
-  };
-
-  const getTotalWeight = () => {
-    return (localChar.inventory || []).reduce((acc, item) => acc + (parseFloat(item.weight) || 0), 0);
-  };
-
-  const currentXp = char.xp || 0;
-  const nextLevelXp = LEVEL_XP[char.level] || 999999;
-  const prevLevelXp = LEVEL_XP[char.level - 1] || 0;
-  const xpProgress = Math.min(100, Math.max(0, ((currentXp - prevLevelXp) / (nextLevelXp - prevLevelXp)) * 100));
-  const canLevelUp = currentXp >= nextLevelXp;
-
-  const levelUp = () => {
-    const conMod = Math.floor(((localChar.stats?.con || 10) - 10) / 2);
-    const hpGain = 6 + conMod;
-    updateCharacter(char.id, {
-      level: char.level + 1,
-      maxHp: (char.maxHp || 10) + hpGain,
-      hp: (char.hp || 10) + hpGain
+  // ========== AUTHENTICATION EFFECT ==========
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+      
+      if (currentUser) {
+        // Load user data from Firestore
+        await loadUserData(currentUser.uid);
+      } else {
+        // Clear data when logged out
+        setCampaigns([]);
+        setCharacters([]);
+        setEncounters([]);
+        setNotes([]);
+      }
     });
-  };
 
-  const addTrait = () => {
-    if (!newTrait.name) return;
-    const desc = newTrait.desc || COMMON_TRAITS_LOOKUP[newTrait.name] || "";
-    const updatedTraits = [...(localChar.traitsList || []), { ...newTrait, desc }];
-    setLocalChar({ ...localChar, traitsList: updatedTraits });
-    setNewTrait({ name: "", type: "race", desc: "" });
-  };
+    return () => unsubscribe();
+  }, []);
 
-  const autoFillTraits = () => {
-    const raceTraits = STANDARD_DATA.races[localChar.race] || [];
-    const classTraits = STANDARD_DATA.classes[localChar.class] || [];
-    const existingNames = new Set((localChar.traitsList || []).map(t => t.name));
-    const newTraits = [
-      ...raceTraits.filter(t => !existingNames.has(t.name)),
-      ...classTraits.filter(t => !existingNames.has(t.name))
-    ];
-    if (newTraits.length > 0) {
-      setLocalChar({ ...localChar, traitsList: [...(localChar.traitsList || []), ...newTraits] });
+  // ========== FIRESTORE DATA LOADING ==========
+  const loadUserData = async (userId) => {
+    try {
+      const userDocRef = doc(db, `artifacts/dnd-companion-v1/users/${userId}`);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setCampaigns(data.campaigns || []);
+        setCharacters(data.characters || []);
+        setEncounters(data.encounters || []);
+        setNotes(data.notes || []);
+        setDiceHistory(data.diceHistory || []);
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
     }
   };
 
-  const removeTrait = (idx) => {
-    const updatedTraits = [...(localChar.traitsList || [])];
-    updatedTraits.splice(idx, 1);
-    setLocalChar({ ...localChar, traitsList: updatedTraits });
+  // ========== FIRESTORE DATA SAVING ==========
+  const saveUserData = async () => {
+    if (!user) return;
+    
+    try {
+      const userDocRef = doc(db, `artifacts/dnd-companion-v1/users/${user.uid}`);
+      await setDoc(userDocRef, {
+        campaigns,
+        characters,
+        encounters,
+        notes,
+        diceHistory: diceHistory.slice(0, 50), // Keep last 50 rolls
+        lastUpdated: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Error saving user data:", error);
+    }
   };
 
-  const toggleCondition = (cond) => {
-    let conds = localChar.conditions || [];
-    if (conds.includes(cond)) conds = conds.filter(c => c !== cond);
-    else conds = [...conds, cond];
-    setLocalChar({ ...localChar, conditions: conds });
+  // Auto-save whenever data changes
+  useEffect(() => {
+    if (user && !loading) {
+      const timeoutId = setTimeout(() => {
+        saveUserData();
+      }, 1000); // Debounce saves by 1 second
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [campaigns, characters, encounters, notes, user, loading]);
+
+  // ========== AUTHENTICATION HANDLERS ==========
+  const handleSignUp = async (email, password) => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      alert("Sign up error: " + error.message);
+    }
   };
 
-  const renderTraits = () => (
-    <div className="flex flex-wrap mb-2">
-      {(localChar.traitsList || []).map((t, idx) => (
-        <div key={idx} className="relative group">
-          <TraitBadge trait={t} onClick={() => isEditing && removeTrait(idx)} />
-          {isEditing && (
-            <button type="button" onClick={() => removeTrait(idx)}
-              className="absolute -top-2 -right-1 bg-red-500 rounded-full w-3 h-3 flex items-center justify-center text-[8px] cursor-pointer">
-              x
-            </button>
-          )}
+  const handleSignIn = async (email, password) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      alert("Sign in error: " + error.message);
+    }
+  };
+
+  const handleSignInAnonymously = async () => {
+    try {
+      await signInAnonymously(auth);
+    } catch (error) {
+      alert("Anonymous sign in error: " + error.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      alert("Sign out error: " + error.message);
+    }
+  };
+
+  // ========== CAMPAIGN HANDLERS ==========
+  const createCampaign = (name, description = "") => {
+    const newCampaign = {
+      id: `campaign-${Date.now()}`,
+      name,
+      description,
+      createdAt: new Date().toISOString(),
+      module: "Random",
+      characterIds: [],
+      encounterIds: [],
+      notes: ""
+    };
+    setCampaigns([...campaigns, newCampaign]);
+    setSelectedCampaign(newCampaign.id);
+    return newCampaign;
+  };
+
+  const deleteCampaign = (campaignId) => {
+    if (window.confirm("Delete this campaign? This cannot be undone.")) {
+      setCampaigns(campaigns.filter(c => c.id !== campaignId));
+      if (selectedCampaign === campaignId) {
+        setSelectedCampaign(null);
+      }
+    }
+  };
+
+  const updateCampaign = (campaignId, updates) => {
+    setCampaigns(campaigns.map(c => 
+      c.id === campaignId ? { ...c, ...updates } : c
+    ));
+  };
+
+  // ========== CHARACTER HANDLERS ==========
+  const addCharacter = () => {
+    // Calculate final stats with racial bonuses
+    const finalStats = applyRacialBonuses(newCharacter.baseStats, newCharacter.race);
+    
+    // Get default spells for class
+    const defaultSpells = isSpellcaster(newCharacter.class) 
+      ? getDefaultSpellsForClass(newCharacter.class) 
+      : [];
+    
+    // Get spell slots for level 1
+    const spellSlots = isSpellcaster(newCharacter.class)
+      ? getSpellSlots(newCharacter.class, 1)
+      : {};
+    
+    // Calculate HP from class
+    const classData = CLASS_DEFAULTS[newCharacter.class];
+    const conModifier = getModifier(finalStats.con);
+    const maxHp = (classData?.hitDie || 8) + conModifier;
+    
+    const character = {
+      ...newCharacter,
+      id: `char-${Date.now()}`,
+      stats: finalStats,
+      hp: maxHp,
+      maxHp: maxHp,
+      initiative: getModifier(finalStats.dex),
+      proficiencyBonus: 2,
+      spells: defaultSpells,
+      spellSlots: spellSlots,
+      currentSpellSlots: { ...spellSlots },
+      features: classData?.features || [],
+      equipment: classData?.equipment || []
+    };
+
+    setCharacters([...characters, character]);
+    
+    // Add to current campaign if one is selected
+    if (selectedCampaign) {
+      updateCampaign(selectedCampaign, {
+        characterIds: [
+          ...campaigns.find(c => c.id === selectedCampaign).characterIds,
+          character.id
+        ]
+      });
+    }
+    
+    // Reset form
+    setNewCharacter({
+      name: "",
+      race: "Human",
+      class: "Fighter",
+      level: 1,
+      background: "Soldier",
+      alignment: "Lawful Good",
+      stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+      baseStats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+      hp: 10,
+      maxHp: 10,
+      tempHp: 0,
+      ac: 10,
+      speed: 30,
+      initiative: 0,
+      proficiencyBonus: 2,
+      skills: [],
+      equipment: [],
+      spells: [],
+      features: [],
+      notes: "",
+      xp: 0,
+      portraitUrl: "",
+      personalityTraits: "",
+      ideals: "",
+      bonds: "",
+      flaws: "",
+      inspiration: false,
+      deathSaves: { successes: 0, failures: 0 },
+      exhaustion: 0,
+      spellSlots: {},
+      currentSpellSlots: {},
+      attunedItems: [],
+      useMilestones: false
+    });
+    
+    setShowCharacterForm(false);
+    setShowPointBuyHelper(false);
+  };
+
+  const deleteCharacter = (charId) => {
+    if (window.confirm("Delete this character? This cannot be undone.")) {
+      setCharacters(characters.filter(c => c.id !== charId));
+      
+      // Remove from all campaigns
+      setCampaigns(campaigns.map(campaign => ({
+        ...campaign,
+        characterIds: campaign.characterIds.filter(id => id !== charId)
+      })));
+    }
+  };
+
+  const updateCharacter = (charId, updates) => {
+    setCharacters(characters.map(c => 
+      c.id === charId ? { ...c, ...updates } : c
+    ));
+  };
+
+  // ========== LOADING SCREEN ==========
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+        <div className="text-center">
+          <Sword className="w-16 h-16 text-amber-500 animate-pulse mx-auto mb-4" />
+          <p className="text-white text-xl">Loading D&D Companion...</p>
         </div>
-      ))}
+      </div>
+    );
+  }
+
+  // ========== LOGIN SCREEN ==========
+  if (!user) {
+    return <LoginScreen 
+      onSignIn={handleSignIn}
+      onSignUp={handleSignUp}
+      onSignInAnonymously={handleSignInAnonymously}
+    />;
+  }
+  // ========== ENCOUNTER HANDLERS ==========
+  const createEncounter = (name, participants = []) => {
+    const encounter = {
+      id: `enc-${Date.now()}`,
+      name,
+      participants: participants.map((p, idx) => ({
+        ...p,
+        id: p.id || `participant-${Date.now()}-${idx}`,
+        initiative: p.initiative || 0,
+        currentHp: p.hp || p.maxHp || 10,
+        maxHp: p.maxHp || 10,
+        ac: p.ac || 10,
+        isPlayer: p.isPlayer || false,
+        conditions: p.conditions || []
+      })),
+      round: 0,
+      currentTurn: 0,
+      log: [],
+      isActive: false,
+      createdAt: new Date().toISOString()
+    };
+    setEncounters([...encounters, encounter]);
+    return encounter;
+  };
+
+  const deleteEncounter = (encId) => {
+    if (window.confirm("Delete this encounter?")) {
+      setEncounters(encounters.filter(e => e.id !== encId));
+      if (activeEncounter?.id === encId) {
+        setActiveEncounter(null);
+      }
+    }
+  };
+
+  const startEncounter = (encounter) => {
+    // Sort by initiative (highest first)
+    const sorted = [...encounter.participants].sort((a, b) => b.initiative - a.initiative);
+    const started = {
+      ...encounter,
+      participants: sorted,
+      round: 1,
+      currentTurn: 0,
+      isActive: true,
+      log: [`Combat started! Round 1 begins.`]
+    };
+    setActiveEncounter(started);
+    updateEncounter(encounter.id, started);
+  };
+
+  const endEncounter = () => {
+    if (activeEncounter) {
+      const ended = {
+        ...activeEncounter,
+        isActive: false,
+        log: [...activeEncounter.log, "Combat ended."]
+      };
+      updateEncounter(activeEncounter.id, ended);
+      setActiveEncounter(null);
+    }
+  };
+
+  const nextTurn = () => {
+    if (!activeEncounter) return;
+    
+    const nextTurnIndex = (activeEncounter.currentTurn + 1) % activeEncounter.participants.length;
+    const isNewRound = nextTurnIndex === 0;
+    
+    const updated = {
+      ...activeEncounter,
+      currentTurn: nextTurnIndex,
+      round: isNewRound ? activeEncounter.round + 1 : activeEncounter.round,
+      log: [
+        ...activeEncounter.log,
+        isNewRound ? `--- Round ${activeEncounter.round + 1} ---` : "",
+        `${activeEncounter.participants[nextTurnIndex].name}'s turn.`
+      ].filter(Boolean)
+    };
+    
+    setActiveEncounter(updated);
+    updateEncounter(activeEncounter.id, updated);
+  };
+
+  const updateEncounter = (encId, updates) => {
+    setEncounters(encounters.map(e => 
+      e.id === encId ? { ...e, ...updates } : e
+    ));
+  };
+
+  const damageParticipant = (participantId, damage) => {
+    if (!activeEncounter) return;
+    
+    const updated = {
+      ...activeEncounter,
+      participants: activeEncounter.participants.map(p => {
+        if (p.id === participantId) {
+          const newHp = Math.max(0, p.currentHp - damage);
+          const isDown = newHp === 0 && p.currentHp > 0;
+          return {
+            ...p,
+            currentHp: newHp,
+            conditions: isDown ? [...p.conditions, "Unconscious"] : p.conditions
+          };
+        }
+        return p;
+      }),
+      log: [
+        ...activeEncounter.log,
+        `${activeEncounter.participants.find(p => p.id === participantId).name} takes ${damage} damage.`
+      ]
+    };
+    
+    setActiveEncounter(updated);
+    updateEncounter(activeEncounter.id, updated);
+  };
+
+  const healParticipant = (participantId, healing) => {
+    if (!activeEncounter) return;
+    
+    const updated = {
+      ...activeEncounter,
+      participants: activeEncounter.participants.map(p => {
+        if (p.id === participantId) {
+          const newHp = Math.min(p.maxHp, p.currentHp + healing);
+          const wasDown = p.currentHp === 0;
+          return {
+            ...p,
+            currentHp: newHp,
+            conditions: wasDown ? p.conditions.filter(c => c !== "Unconscious") : p.conditions
+          };
+        }
+        return p;
+      }),
+      log: [
+        ...activeEncounter.log,
+        `${activeEncounter.participants.find(p => p.id === participantId).name} heals ${healing} HP.`
+      ]
+    };
+    
+    setActiveEncounter(updated);
+    updateEncounter(activeEncounter.id, updated);
+  };
+
+  const addCondition = (participantId, condition) => {
+    if (!activeEncounter) return;
+    
+    const updated = {
+      ...activeEncounter,
+      participants: activeEncounter.participants.map(p => {
+        if (p.id === participantId && !p.conditions.includes(condition)) {
+          return { ...p, conditions: [...p.conditions, condition] };
+        }
+        return p;
+      }),
+      log: [
+        ...activeEncounter.log,
+        `${activeEncounter.participants.find(p => p.id === participantId).name} gains condition: ${condition}`
+      ]
+    };
+    
+    setActiveEncounter(updated);
+    updateEncounter(activeEncounter.id, updated);
+  };
+
+  const removeCondition = (participantId, condition) => {
+    if (!activeEncounter) return;
+    
+    const updated = {
+      ...activeEncounter,
+      participants: activeEncounter.participants.map(p => {
+        if (p.id === participantId) {
+          return { ...p, conditions: p.conditions.filter(c => c !== condition) };
+        }
+        return p;
+      }),
+      log: [
+        ...activeEncounter.log,
+        `${activeEncounter.participants.find(p => p.id === participantId).name} loses condition: ${condition}`
+      ]
+    };
+    
+    setActiveEncounter(updated);
+    updateEncounter(activeEncounter.id, updated);
+  };
+
+  // ========== DICE ROLLER ==========
+  const rollDice = (diceNotation, label = "") => {
+    // Parse dice notation like "2d20+5" or "1d6"
+    const match = diceNotation.match(/(\d+)d(\d+)([+-]\d+)?/i);
+    if (!match) return;
+    
+    const [, numDice, diceSize, modifier] = match;
+    const count = parseInt(numDice);
+    const size = parseInt(diceSize);
+    const mod = modifier ? parseInt(modifier) : 0;
+    
+    const rolls = Array(count).fill(0).map(() => Math.floor(Math.random() * size) + 1);
+    const total = rolls.reduce((sum, val) => sum + val, 0) + mod;
+    
+    const result = {
+      notation: diceNotation,
+      rolls,
+      modifier: mod,
+      total,
+      label,
+      timestamp: new Date().toISOString()
+    };
+    
+    setDiceResults([result, ...diceResults.slice(0, 4)]); // Keep last 5
+    setDiceHistory([result, ...diceHistory.slice(0, 49)]); // Keep last 50
+    
+    return result;
+  };
+
+  const rollAbilityCheck = (abilityScore, proficient = false, level = 1, label = "") => {
+    const modifier = getModifier(abilityScore);
+    const profBonus = proficient ? getProficiencyBonus(level) : 0;
+    const totalMod = modifier + profBonus;
+    
+    const roll = Math.floor(Math.random() * 20) + 1;
+    const total = roll + totalMod;
+    
+    const result = {
+      notation: `1d20${totalMod >= 0 ? '+' : ''}${totalMod}`,
+      rolls: [roll],
+      modifier: totalMod,
+      total,
+      label: label || `Ability Check (${totalMod >= 0 ? '+' : ''}${totalMod})`,
+      timestamp: new Date().toISOString(),
+      isCrit: roll === 20,
+      isFail: roll === 1
+    };
+    
+    setDiceResults([result, ...diceResults.slice(0, 4)]);
+    setDiceHistory([result, ...diceHistory.slice(0, 49)]);
+    
+    return result;
+  };
+
+  // ========== NOTES HANDLERS ==========
+  const saveNote = () => {
+    if (!noteTitle.trim() && !currentNote.trim()) return;
+    
+    if (editingNoteId) {
+      // Update existing note
+      setNotes(notes.map(n => 
+        n.id === editingNoteId 
+          ? { ...n, title: noteTitle, content: currentNote, updatedAt: new Date().toISOString() }
+          : n
+      ));
+      setEditingNoteId(null);
+    } else {
+      // Create new note
+      const newNote = {
+        id: `note-${Date.now()}`,
+        title: noteTitle || "Untitled Note",
+        content: currentNote,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setNotes([newNote, ...notes]);
+    }
+    
+    setNoteTitle("");
+    setCurrentNote("");
+  };
+
+  const editNote = (note) => {
+    setNoteTitle(note.title);
+    setCurrentNote(note.content);
+    setEditingNoteId(note.id);
+    setActiveTab("notes");
+  };
+
+  const deleteNote = (noteId) => {
+    if (window.confirm("Delete this note?")) {
+      setNotes(notes.filter(n => n.id !== noteId));
+      if (editingNoteId === noteId) {
+        setNoteTitle("");
+        setCurrentNote("");
+        setEditingNoteId(null);
+      }
+    }
+  };
+
+  // ========== QUICK ENCOUNTER BUILDER ==========
+  const buildQuickEncounter = (moduleEncounter) => {
+    const monsterParticipants = moduleEncounter.monsters.map((monsterName, idx) => {
+      const monsterData = MONSTER_MANUAL.find(m => m.name === monsterName);
+      return {
+        id: `monster-${Date.now()}-${idx}`,
+        name: `${monsterName} ${idx + 1}`,
+        hp: monsterData?.hp || 10,
+        maxHp: monsterData?.hp || 10,
+        currentHp: monsterData?.hp || 10,
+        ac: monsterData?.ac || 10,
+        initiative: Math.floor(Math.random() * 20) + 1,
+        isPlayer: false,
+        type: monsterData?.type || "Unknown",
+        cr: monsterData?.cr || "?",
+        actions: monsterData?.actions || "No actions listed"
+      };
+    });
+
+    const playerParticipants = characters
+      .filter(c => selectedCampaign ? 
+        campaigns.find(camp => camp.id === selectedCampaign)?.characterIds.includes(c.id) 
+        : true)
+      .map(c => ({
+        id: c.id,
+        name: c.name,
+        hp: c.hp,
+        maxHp: c.maxHp,
+        currentHp: c.hp,
+        ac: c.ac,
+        initiative: Math.floor(Math.random() * 20) + 1 + getModifier(c.stats.dex),
+        isPlayer: true,
+        class: c.class,
+        level: c.level
+      }));
+
+    const encounter = createEncounter(
+      moduleEncounter.name,
+      [...playerParticipants, ...monsterParticipants]
+    );
+
+    setActiveTab("combat");
+    return encounter;
+  };
+
+  // ========== HELPER COMPONENTS ==========
+  
+  // Login Screen Component
+  const LoginScreen = ({ onSignIn, onSignUp, onSignInAnonymously }) => {
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [isSignUp, setIsSignUp] = useState(false);
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-amber-900 flex items-center justify-center p-4">
+        <div className="bg-slate-800 rounded-lg shadow-2xl p-8 max-w-md w-full border border-amber-700">
+          <div className="text-center mb-8">
+            <Sword className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+            <h1 className="text-4xl font-bold text-amber-500 mb-2">D&D Companion</h1>
+            <p className="text-slate-300">Your Ultimate Campaign Manager</p>
+          </div>
+
+          <div className="space-y-4">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-amber-500 focus:outline-none"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-700 text-white rounded border border-slate-600 focus:border-amber-500 focus:outline-none"
+            />
+            
+            <button
+              onClick={() => isSignUp ? onSignUp(email, password) : onSignIn(email, password)}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded transition"
+            >
+              {isSignUp ? "Sign Up" : "Sign In"}
+            </button>
+
+            <button
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="w-full text-amber-400 hover:text-amber-300 text-sm transition"
+            >
+              {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+            </button>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-600"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-slate-800 text-slate-400">Or</span>
+              </div>
+            </div>
+
+            <button
+              onClick={onSignInAnonymously}
+              className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-4 rounded transition"
+            >
+              Continue as Guest
+            </button>
+          </div>
+
+          <p className="mt-6 text-center text-slate-400 text-xs">
+            Guest mode: Your data is saved locally but won't sync across devices
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // Stat Block Component
+  const StatBlock = ({ stat, value, modifier, isPrinter = false }) => (
+    <div className={`text-center p-2 rounded ${isPrinter ? 'border border-black' : 'bg-slate-700'}`}>
+      <div className={`text-xs font-semibold ${isPrinter ? 'text-black' : 'text-amber-400'} uppercase`}>
+        {stat}
+      </div>
+      <div className={`text-2xl font-bold ${isPrinter ? 'text-black' : 'text-white'}`}>
+        {value}
+      </div>
+      <div className={`text-sm ${isPrinter ? 'text-black' : 'text-slate-300'}`}>
+        {formatModifier(modifier)}
+      </div>
     </div>
   );
 
-  return (
-    <div className={`${getCardClass(printerMode)} rounded-lg overflow-hidden transition-all duration-300 relative`}>
-      <div className={`p-4 flex items-center justify-between ${printerMode ? 'bg-gray-50 border-b border-black' : 'bg-slate-900'}`}>
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${canLevelUp ? 'bg-amber-400 text-black animate-pulse cursor-pointer' : (printerMode ? 'border-2 border-black text-black' : 'bg-indigo-900 text-indigo-200')}`}
-              onClick={() => canLevelUp && levelUp()} title={canLevelUp ? "Level Up!" : "Level"}>
-              {isEditing ? (
-                <input type="number" className="w-full h-full text-center bg-transparent border-none focus:outline-none"
-                  value={localChar.level} onChange={(e) => setLocalChar({ ...localChar, level: parseInt(e.target.value) || 1 })} />
-              ) : (
-                <span>{char.level}</span>
-              )}
-            </div>
-            {canLevelUp && (
-              <div className="absolute -top-2 -right-2 bg-green-500 rounded-full p-0.5">
-                <TrendingUp size={10} className="text-white" />
+  // Dice Button Component
+  const DiceButton = ({ notation, label, size = "normal" }) => {
+    const sizeClasses = {
+      small: "px-2 py-1 text-xs",
+      normal: "px-3 py-2 text-sm",
+      large: "px-4 py-3 text-base"
+    };
+
+    return (
+      <button
+        onClick={() => rollDice(notation, label)}
+        className={`bg-amber-600 hover:bg-amber-700 text-white font-bold rounded transition ${sizeClasses[size]}`}
+      >
+        {label || notation}
+      </button>
+    );
+  };
+  // ========== CHARACTER CARD COMPONENT ==========
+  const CharacterCard = ({ char }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [localChar, setLocalChar] = useState({ ...char });
+    const [showFullSpells, setShowFullSpells] = useState(false);
+    const [showPointBuy, setShowPointBuy] = useState(false);
+    const [selectedSpellLevel, setSelectedSpellLevel] = useState(0);
+
+    // Calculate derived stats
+    const statModifiers = {
+      str: getModifier(localChar.stats.str),
+      dex: getModifier(localChar.stats.dex),
+      con: getModifier(localChar.stats.con),
+      int: getModifier(localChar.stats.int),
+      wis: getModifier(localChar.stats.wis),
+      cha: getModifier(localChar.stats.cha)
+    };
+
+    const profBonus = getProficiencyBonus(localChar.level);
+
+    // Save changes
+    const saveChanges = () => {
+      // Recalculate HP if CON changed
+      if (localChar.stats.con !== char.stats.con) {
+        const oldConMod = getModifier(char.stats.con);
+        const newConMod = getModifier(localChar.stats.con);
+        const hpDiff = (newConMod - oldConMod) * localChar.level;
+        localChar.maxHp = Math.max(1, localChar.maxHp + hpDiff);
+        localChar.hp = Math.max(0, localChar.hp + hpDiff);
+      }
+
+      // Update spell slots if class/level changed
+      if (isSpellcaster(localChar.class)) {
+        const newSlots = getSpellSlots(localChar.class, localChar.level);
+        localChar.spellSlots = newSlots || {};
+        // Reset current slots to max
+        localChar.currentSpellSlots = { ...newSlots };
+      }
+
+      updateCharacter(char.id, localChar);
+      setIsEditing(false);
+    };
+
+    const cancelEditing = () => {
+      setLocalChar({ ...char });
+      setIsEditing(false);
+      setShowPointBuy(false);
+    };
+
+    // Point Buy helper
+    const updateBaseStat = (stat, value) => {
+      const newValue = Math.max(8, Math.min(15, parseInt(value) || 8));
+      const newBaseStats = { ...localChar.baseStats, [stat]: newValue };
+      const newFinalStats = applyRacialBonuses(newBaseStats, localChar.race);
+      setLocalChar({ 
+        ...localChar, 
+        baseStats: newBaseStats,
+        stats: newFinalStats
+      });
+    };
+
+    // Spell management
+    const addSpellToCharacter = (spellName) => {
+      if (!localChar.spells.includes(spellName)) {
+        setLocalChar({ ...localChar, spells: [...localChar.spells, spellName] });
+      }
+    };
+
+    const removeSpellFromCharacter = (spellName) => {
+      setLocalChar({ ...localChar, spells: localChar.spells.filter(s => s !== spellName) });
+    };
+
+    const useSpellSlot = (level) => {
+      if (localChar.currentSpellSlots[level] > 0) {
+        const updated = {
+          ...localChar,
+          currentSpellSlots: {
+            ...localChar.currentSpellSlots,
+            [level]: localChar.currentSpellSlots[level] - 1
+          }
+        };
+        updateCharacter(char.id, updated);
+        setLocalChar(updated);
+      }
+    };
+
+    const restoreSpellSlot = (level) => {
+      if (localChar.currentSpellSlots[level] < localChar.spellSlots[level]) {
+        const updated = {
+          ...localChar,
+          currentSpellSlots: {
+            ...localChar.currentSpellSlots,
+            [level]: localChar.currentSpellSlots[level] + 1
+          }
+        };
+        updateCharacter(char.id, updated);
+        setLocalChar(updated);
+      }
+    };
+
+    const longRest = () => {
+      const updated = {
+        ...localChar,
+        hp: localChar.maxHp,
+        tempHp: 0,
+        currentSpellSlots: { ...localChar.spellSlots },
+        deathSaves: { successes: 0, failures: 0 }
+      };
+      updateCharacter(char.id, updated);
+      setLocalChar(updated);
+    };
+
+    // Death saves
+    const rollDeathSave = () => {
+      const roll = Math.floor(Math.random() * 20) + 1;
+      const updated = { ...localChar };
+      
+      if (roll === 20) {
+        // Nat 20: regain 1 HP
+        updated.hp = 1;
+        updated.deathSaves = { successes: 0, failures: 0 };
+        alert("Natural 20! Character regains 1 HP!");
+      } else if (roll === 1) {
+        // Nat 1: 2 failures
+        updated.deathSaves.failures = Math.min(3, updated.deathSaves.failures + 2);
+        if (updated.deathSaves.failures >= 3) {
+          alert("Character has died!");
+        }
+      } else if (roll >= 10) {
+        // Success
+        updated.deathSaves.successes = Math.min(3, updated.deathSaves.successes + 1);
+        if (updated.deathSaves.successes >= 3) {
+          updated.hp = 1;
+          updated.deathSaves = { successes: 0, failures: 0 };
+          alert("Stabilized! Character has 1 HP.");
+        }
+      } else {
+        // Failure
+        updated.deathSaves.failures = Math.min(3, updated.deathSaves.failures + 1);
+        if (updated.deathSaves.failures >= 3) {
+          alert("Character has died!");
+        }
+      }
+      
+      updateCharacter(char.id, updated);
+      setLocalChar(updated);
+    };
+
+    // Attunement management
+    const toggleAttunement = (itemName) => {
+      const isAttuned = localChar.attunedItems.includes(itemName);
+      let newAttuned = [...localChar.attunedItems];
+      
+      if (isAttuned) {
+        newAttuned = newAttuned.filter(i => i !== itemName);
+      } else {
+        if (newAttuned.length >= 3) {
+          alert("Maximum 3 attuned items! Remove one first.");
+          return;
+        }
+        newAttuned.push(itemName);
+      }
+      
+      const updated = { ...localChar, attunedItems: newAttuned };
+      updateCharacter(char.id, updated);
+      setLocalChar(updated);
+    };
+
+    // Point Buy validation display
+    const pointBuyValidation = validatePointBuy(localChar.baseStats);
+    const racialBonusesForRace = RACIAL_BONUSES[localChar.race] || {};
+
+    return (
+      <div className={`${printerMode ? 'bg-white text-black border-2 border-black' : 'bg-slate-800 border border-amber-700'} rounded-lg p-6 shadow-xl`}>
+        {/* ========== HEADER ========== */}
+        <div className="flex justify-between items-start mb-6">
+          <div className="flex-1">
+            {isEditing ? (
+              <input
+                type="text"
+                className={`font-bold text-2xl ${printerMode ? 'bg-white border border-black' : 'bg-slate-900 border border-slate-600'} rounded px-3 py-2 text-white w-full mb-2`}
+                value={localChar.name}
+                onChange={(e) => setLocalChar({ ...localChar, name: e.target.value })}
+              />
+            ) : (
+              <h3 className={`font-bold text-2xl mb-2 ${printerMode ? 'text-black' : 'text-white'}`}>
+                {char.name}
+              </h3>
+            )}
+            
+            {isEditing ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <select
+                    value={localChar.race}
+                    onChange={(e) => {
+                      const newRace = e.target.value;
+                      const newStats = applyRacialBonuses(localChar.baseStats, newRace);
+                      setLocalChar({ ...localChar, race: newRace, stats: newStats });
+                    }}
+                    className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 border border-slate-600 text-white'} rounded px-2 py-1`}
+                  >
+                    {RACES.map(race => (
+                      <option key={race} value={race}>{race}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={localChar.class}
+                    onChange={(e) => {
+                      const newClass = e.target.value;
+                      const classData = CLASS_DEFAULTS[newClass];
+                      const newSpells = isSpellcaster(newClass) ? getDefaultSpellsForClass(newClass) : [];
+                      setLocalChar({ ...localChar, class: newClass, spells: newSpells });
+                    }}
+                    className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 border border-slate-600 text-white'} rounded px-2 py-1`}
+                  >
+                    {CLASSES.map(cls => (
+                      <option key={cls} value={cls}>{cls}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <select
+                  value={localChar.alignment}
+                  onChange={(e) => setLocalChar({ ...localChar, alignment: e.target.value })}
+                  className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 border border-slate-600 text-white'} rounded px-2 py-1 w-full`}
+                >
+                  {ALIGNMENTS.map(align => (
+                    <option key={align} value={align}>{align}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={localChar.background}
+                  onChange={(e) => setLocalChar({ ...localChar, background: e.target.value })}
+                  className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 border border-slate-600 text-white'} rounded px-2 py-1 w-full`}
+                >
+                  {BACKGROUNDS.map(bg => (
+                    <option key={bg} value={bg}>{bg}</option>
+                  ))}
+                </select>
+
+                <div className="flex items-center gap-2">
+                  <label className={`text-sm ${printerMode ? 'text-black' : 'text-slate-300'}`}>
+                    Level:
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={localChar.level}
+                    onChange={(e) => setLocalChar({ ...localChar, level: parseInt(e.target.value) || 1 })}
+                    className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 border border-slate-600 text-white'} rounded px-2 py-1 w-20`}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className={`text-sm ${printerMode ? 'text-black' : 'text-slate-300'}`}>
+                    Portrait URL:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://..."
+                    value={localChar.portraitUrl || ""}
+                    onChange={(e) => setLocalChar({ ...localChar, portraitUrl: e.target.value })}
+                    className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 border border-slate-600 text-white'} rounded px-2 py-1 flex-1 text-sm`}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className={`${printerMode ? 'text-black' : 'text-slate-300'} text-lg`}>
+                  {char.race} {char.class}
+                </p>
+                <p className={`${printerMode ? 'text-gray-700' : 'text-slate-400'} text-sm`}>
+                  Level {char.level} • {char.alignment}
+                </p>
+                <p className={`${printerMode ? 'text-gray-700' : 'text-slate-400'} text-sm`}>
+                  {char.background}
+                </p>
               </div>
             )}
           </div>
-          <div>
-            <h3 className={`font-bold text-lg ${printerMode ? 'text-black' : 'text-white'}`}>{char.name}</h3>
-            <div className={`text-xs ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>{char.race} {char.class}</div>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className={`font-mono font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
-            HP {char.hp}/{char.maxHp}
-          </div>
-          <button onClick={() => setExpanded(!expanded)}>
-            {expanded ? <ChevronUp /> : <ChevronDown />}
-          </button>
-        </div>
-      </div>
 
-      <div className={`h-1.5 w-full ${printerMode ? 'bg-gray-200' : 'bg-slate-800'}`}>
-        <div className="h-full bg-purple-600 transition-all" style={{ width: `${xpProgress}%` }}></div>
-      </div>
+          {/* Portrait */}
+          {localChar.portraitUrl && !printerMode && (
+            <img 
+              src={localChar.portraitUrl} 
+              alt={localChar.name}
+              className="w-20 h-20 rounded-full object-cover border-2 border-amber-600 ml-4"
+              onError={(e) => e.target.style.display = 'none'}
+            />
+          )}
 
-      {expanded && (
-        <div className={`p-4 ${printerMode ? 'bg-white' : 'border-t border-slate-700'}`}>
-          <div className="grid grid-cols-4 gap-2 mb-4 text-center">
-            <div className={`bg-slate-800 p-1 rounded ${!isEditing ? 'cursor-pointer hover:bg-slate-700' : ''}`}
-              onClick={() => !isEditing && clickAC()} title="Click to Broadcast AC">
-              <div className="text-[10px] uppercase opacity-50">AC</div>
-              <div className="font-bold text-white">{localChar.ac}</div>
-            </div>
-            <div className={`bg-slate-800 p-1 rounded ${!isEditing ? 'cursor-pointer hover:bg-slate-700' : ''}`}
-              onClick={() => !isEditing && clickInit()} title="Click to Roll Init">
-              <div className="text-[10px] uppercase opacity-50">Init</div>
-              <div className="font-bold text-white">{fmtMod(localChar.stats.dex)}</div>
-            </div>
-            <div className="bg-slate-800 p-1 rounded">
-              <div className="text-[10px] uppercase opacity-50">Speed</div>
-              <div className="font-bold text-white">{localChar.speed || 30}ft</div>
-            </div>
-            <div className="bg-slate-800 p-1 rounded">
-              <div className="text-[10px] uppercase opacity-50">Prof</div>
-              <div className="font-bold text-white">+{profBonus}</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-6 gap-1 mb-4">
-            {Object.keys(localChar.stats).map(stat => (
-              <div key={stat} className={`flex flex-col items-center p-1 bg-slate-900/50 rounded border border-slate-800 ${!isEditing ? 'cursor-pointer hover:bg-slate-800 hover:border-amber-500/50' : ''}`}
-                onClick={() => !isEditing && clickStat(stat)}
-                title={!isEditing ? `Roll ${stat.toUpperCase()} Check` : ""}>
-                <span className="text-[9px] uppercase font-bold text-slate-500">{stat}</span>
-                {isEditing ? (
-                  <input type="number" className="w-full text-center bg-transparent font-bold text-amber-500 text-sm"
-                    value={localChar.stats[stat]}
-                    onChange={e => setLocalChar({ ...localChar, stats: { ...localChar.stats, [stat]: parseInt(e.target.value) || 10 } })} />
-                ) : (
-                  <span className="font-bold text-white text-sm">{localChar.stats[stat]}</span>
-                )}
-                <span className="text-[9px] text-slate-400">{fmtMod(localChar.stats[stat])}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-slate-800/50 p-2 rounded border border-slate-700">
-              <h4 className="text-xs font-bold uppercase mb-2 text-slate-400 flex items-center">
-                <Shield size={12} className="mr-1" /> Saving Throws (Click)
-              </h4>
-              <div className="grid grid-cols-3 gap-2">
-                {Object.keys(localChar.stats).map(stat => (
-                  <div key={stat} className={`flex items-center justify-between text-xs ${!isEditing ? 'cursor-pointer hover:text-amber-400' : ''}`}
-                    onClick={() => !isEditing && clickSave(stat)}>
-                    <span className="uppercase">{stat}</span>
-                    <div className="flex items-center">
-                      {isEditing && (
-                        <input type="checkbox" checked={localChar.proficiencies?.saves?.[stat]}
-                          onChange={() => toggleSave(stat)} className="mr-1" />
-                      )}
-                      <span className={`font-mono ${localChar.proficiencies?.saves?.[stat] ? 'text-green-400 font-bold' : 'text-slate-400'}`}>
-                        {getSaveVal(stat)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-800/50 p-2 rounded border border-slate-700">
-              <h4 className="text-xs font-bold uppercase mb-2 text-slate-400 flex items-center">
-                <Eye size={12} className="mr-1" /> Passive Senses
-              </h4>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span>Perception:</span>
-                  <span className="font-bold text-white">{getPassive("Perception")}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Investigation:</span>
-                  <span className="font-bold text-white">{getPassive("Investigation")}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Vision:</span>
-                  <span className="font-bold text-white">{localChar.vision || "0"} ft</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-[9px] uppercase font-bold opacity-50">Skills (Click to Roll)</label>
-              {isEditing && (
-                <button onClick={() => setShowSkillPicker(!showSkillPicker)}
-                  className="text-[9px] bg-slate-700 px-2 rounded hover:bg-slate-600">
-                  Edit
-                </button>
+          {!printerMode && (
+            <div className="flex gap-2 ml-4">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={saveChanges}
+                    className="bg-green-600 hover:bg-green-700 text-white p-2 rounded transition"
+                  >
+                    <Check className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="bg-red-600 hover:bg-red-700 text-white p-2 rounded transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded transition"
+                  >
+                    <Edit className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => deleteCharacter(char.id)}
+                    className="bg-red-600 hover:bg-red-700 text-white p-2 rounded transition"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </>
               )}
             </div>
+          )}
+        </div>
 
-            {showSkillPicker && isEditing && (
-              <div className="mb-2 p-2 bg-slate-900 border border-slate-600 rounded grid grid-cols-2 gap-1 max-h-40 overflow-y-auto">
-                {SKILLS_DATA.map(skill => (
-                  <label key={skill.name} className="flex items-center text-xs space-x-2 cursor-pointer hover:bg-slate-800 p-1 rounded">
-                    <input type="checkbox"
-                      checked={localChar.proficiencies?.skills?.includes(skill.name)}
-                      onChange={() => clickSkill(skill.name)} />
-                    <span>{skill.name} <span className="opacity-50">({skill.stat})</span></span>
+        {/* ========== CORE STATS ========== */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className={`text-center p-3 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+            <div className={`text-sm ${printerMode ? 'text-black' : 'text-amber-400'}`}>AC</div>
+            {isEditing ? (
+              <input
+                type="number"
+                value={localChar.ac}
+                onChange={(e) => setLocalChar({ ...localChar, ac: parseInt(e.target.value) || 10 })}
+                className={`text-2xl font-bold text-center w-full ${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white'} rounded`}
+              />
+            ) : (
+              <div className={`text-2xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>{char.ac}</div>
+            )}
+          </div>
+
+          <div className={`text-center p-3 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+            <div className={`text-sm ${printerMode ? 'text-black' : 'text-amber-400'}`}>Initiative</div>
+            <div className={`text-2xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+              {formatModifier(statModifiers.dex)}
+            </div>
+          </div>
+
+          <div className={`text-center p-3 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+            <div className={`text-sm ${printerMode ? 'text-black' : 'text-amber-400'}`}>Speed</div>
+            {isEditing ? (
+              <input
+                type="number"
+                value={localChar.speed}
+                onChange={(e) => setLocalChar({ ...localChar, speed: parseInt(e.target.value) || 30 })}
+                className={`text-2xl font-bold text-center w-full ${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white'} rounded`}
+              />
+            ) : (
+              <div className={`text-2xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>{char.speed} ft</div>
+            )}
+          </div>
+        </div>
+
+        {/* ========== HP & TEMP HP ========== */}
+        <div className="mb-6 space-y-3">
+          <div className={`p-4 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+            <div className="flex justify-between items-center mb-2">
+              <span className={`text-sm font-semibold ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+                Hit Points
+              </span>
+              {!printerMode && !isEditing && (
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => updateCharacter(char.id, { hp: Math.max(0, char.hp - 1) })}
+                    className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs"
+                  >
+                    -1
+                  </button>
+                  <button
+                    onClick={() => updateCharacter(char.id, { hp: Math.min(char.maxHp, char.hp + 1) })}
+                    className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs"
+                  >
+                    +1
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              {isEditing ? (
+                <div className="flex gap-2 items-center flex-1">
+                  <input
+                    type="number"
+                    value={localChar.hp}
+                    onChange={(e) => setLocalChar({ ...localChar, hp: parseInt(e.target.value) || 0 })}
+                    className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white'} rounded px-2 py-1 w-20`}
+                  />
+                  <span className={printerMode ? 'text-black' : 'text-white'}>/</span>
+                  <input
+                    type="number"
+                    value={localChar.maxHp}
+                    onChange={(e) => setLocalChar({ ...localChar, maxHp: parseInt(e.target.value) || 1 })}
+                    className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white'} rounded px-2 py-1 w-20`}
+                  />
+                </div>
+              ) : (
+                <div className={`text-2xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+                  {char.hp} / {char.maxHp}
+                </div>
+              )}
+              <div className={`text-sm ${printerMode ? 'text-gray-700' : 'text-slate-300'}`}>
+                ({Math.round((char.hp / char.maxHp) * 100)}%)
+              </div>
+            </div>
+          </div>
+
+          {/* Temporary HP */}
+          <div className={`p-3 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+            <div className="flex justify-between items-center">
+              <span className={`text-sm font-semibold ${printerMode ? 'text-black' : 'text-blue-400'}`}>
+                Temp HP
+              </span>
+              {isEditing ? (
+                <input
+                  type="number"
+                  value={localChar.tempHp || 0}
+                  onChange={(e) => setLocalChar({ ...localChar, tempHp: parseInt(e.target.value) || 0 })}
+                  className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white'} rounded px-2 py-1 w-20`}
+                />
+              ) : (
+                <div className={`text-xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+                  {char.tempHp || 0}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        {/* ========== ABILITY SCORES ========== */}
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className={`font-bold ${printerMode ? 'text-black' : 'text-amber-400'}`}>Ability Scores</h4>
+            {isEditing && (
+              <button
+                onClick={() => setShowPointBuy(!showPointBuy)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm"
+              >
+                {showPointBuy ? 'Hide' : 'Show'} Point Buy
+              </button>
+            )}
+          </div>
+
+          {/* Point Buy Helper */}
+          {isEditing && showPointBuy && (
+            <div className={`mb-4 p-4 rounded ${printerMode ? 'border border-black' : 'bg-slate-900 border border-purple-500'}`}>
+              <div className="mb-3">
+                <h5 className={`font-bold mb-2 ${printerMode ? 'text-black' : 'text-purple-400'}`}>
+                  Point Buy System (27 points)
+                </h5>
+                <div className={`text-sm mb-2 ${pointBuyValidation.valid ? 'text-green-400' : 'text-red-400'}`}>
+                  Points: {pointBuyValidation.spent} / 27 
+                  {pointBuyValidation.remaining > 0 && ` (${pointBuyValidation.remaining} remaining)`}
+                  {pointBuyValidation.spent > 27 && ` (${pointBuyValidation.spent - 27} over budget!)`}
+                </div>
+                {pointBuyValidation.errors.length > 0 && (
+                  <div className="text-xs text-yellow-400 mb-2">
+                    ⚠️ {pointBuyValidation.errors.join(', ')}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {['str', 'dex', 'con', 'int', 'wis', 'cha'].map(stat => {
+                  const baseStat = localChar.baseStats[stat];
+                  const racialBonus = racialBonusesForRace[stat] || 0;
+                  const finalStat = localChar.stats[stat];
+                  const cost = getPointBuyCost(baseStat);
+                  
+                  return (
+                    <div key={stat} className={`p-2 rounded ${printerMode ? 'border border-black' : 'bg-slate-800'}`}>
+                      <div className={`text-xs uppercase font-semibold mb-1 ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+                        {stat.toUpperCase()}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="8"
+                          max="15"
+                          value={baseStat}
+                          onChange={(e) => updateBaseStat(stat, e.target.value)}
+                          className={`w-16 px-2 py-1 rounded text-center font-bold ${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-700 text-white'}`}
+                        />
+                        {racialBonus !== 0 && (
+                          <span className={`text-sm ${printerMode ? 'text-black' : 'text-green-400'}`}>
+                            +{racialBonus}
+                          </span>
+                        )}
+                        <span className={`text-sm font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+                          = {finalStat}
+                        </span>
+                      </div>
+                      <div className={`text-xs mt-1 ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
+                        Cost: {cost} {cost === 1 ? 'pt' : 'pts'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Racial Bonuses Summary */}
+              <div className={`text-xs p-2 rounded ${printerMode ? 'bg-gray-100 border border-black' : 'bg-slate-800'}`}>
+                <span className={`font-semibold ${printerMode ? 'text-black' : 'text-green-400'}`}>
+                  {localChar.race} Bonuses:
+                </span>
+                <span className={`ml-2 ${printerMode ? 'text-black' : 'text-slate-300'}`}>
+                  {Object.entries(racialBonusesForRace).length > 0 
+                    ? Object.entries(racialBonusesForRace).map(([stat, bonus]) => 
+                        `${stat.toUpperCase()} +${bonus}`
+                      ).join(', ')
+                    : 'None'}
+                </span>
+              </div>
+
+              {/* Point Buy Reference Table */}
+              <details className="mt-3">
+                <summary className={`cursor-pointer text-xs ${printerMode ? 'text-black' : 'text-purple-400'} hover:underline`}>
+                  Show Point Buy Costs
+                </summary>
+                <div className={`mt-2 text-xs ${printerMode ? 'text-black' : 'text-slate-300'} grid grid-cols-4 gap-2`}>
+                  <div>8 = 0 pts</div>
+                  <div>9 = 1 pt</div>
+                  <div>10 = 2 pts</div>
+                  <div>11 = 3 pts</div>
+                  <div>12 = 4 pts</div>
+                  <div>13 = 5 pts</div>
+                  <div>14 = 7 pts</div>
+                  <div>15 = 9 pts</div>
+                </div>
+              </details>
+            </div>
+          )}
+
+          {/* Standard Ability Score Display */}
+          <div className="grid grid-cols-3 gap-3">
+            {isEditing && !showPointBuy ? (
+              // Simple edit mode (without Point Buy)
+              ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(stat => (
+                <div key={stat} className={`text-center p-2 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+                  <div className={`text-xs font-semibold uppercase mb-1 ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+                    {stat}
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={localChar.stats[stat]}
+                    onChange={(e) => setLocalChar({ 
+                      ...localChar, 
+                      stats: { ...localChar.stats, [stat]: parseInt(e.target.value) || 1 }
+                    })}
+                    className={`text-2xl font-bold text-center w-full ${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white'} rounded mb-1`}
+                  />
+                  <div className={`text-sm ${printerMode ? 'text-gray-700' : 'text-slate-300'}`}>
+                    {formatModifier(getModifier(localChar.stats[stat]))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              // Display mode
+              ['str', 'dex', 'con', 'int', 'wis', 'cha'].map(stat => (
+                <StatBlock
+                  key={stat}
+                  stat={stat.toUpperCase()}
+                  value={char.stats[stat]}
+                  modifier={statModifiers[stat]}
+                  isPrinter={printerMode}
+                />
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* ========== PROFICIENCY BONUS ========== */}
+        <div className={`mb-6 p-3 rounded text-center ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+          <div className={`text-sm ${printerMode ? 'text-black' : 'text-amber-400'} mb-1`}>
+            Proficiency Bonus
+          </div>
+          <div className={`text-2xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+            {formatModifier(profBonus)}
+          </div>
+        </div>
+
+        {/* ========== SKILLS ========== */}
+        <div className="mb-6">
+          <h4 className={`font-bold mb-3 ${printerMode ? 'text-black' : 'text-amber-400'}`}>Skills</h4>
+          {isEditing ? (
+            <div className="space-y-2">
+              <div className={`text-xs ${printerMode ? 'text-gray-700' : 'text-slate-400'} mb-2`}>
+                Max proficient skills for {localChar.class}: {CLASS_DEFAULTS[localChar.class]?.maxSkills || 2}
+                {localChar.skills.length > (CLASS_DEFAULTS[localChar.class]?.maxSkills || 2) && (
+                  <span className="text-yellow-500 ml-2">
+                    ⚠️ Too many skills selected!
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {SKILLS.map(skill => (
+                  <label key={skill} className={`flex items-center gap-2 p-2 rounded cursor-pointer ${
+                    localChar.skills.includes(skill)
+                      ? (printerMode ? 'bg-gray-200 border border-black' : 'bg-slate-700')
+                      : (printerMode ? 'bg-white border border-gray-400' : 'bg-slate-900')
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={localChar.skills.includes(skill)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setLocalChar({ ...localChar, skills: [...localChar.skills, skill] });
+                        } else {
+                          setLocalChar({ ...localChar, skills: localChar.skills.filter(s => s !== skill) });
+                        }
+                      }}
+                      className="form-checkbox"
+                    />
+                    <span className={`text-sm ${printerMode ? 'text-black' : 'text-white'}`}>{skill}</span>
                   </label>
                 ))}
               </div>
-            )}
-
-            <div className="flex flex-wrap gap-1">
-              {(localChar.proficiencies?.skills || []).map(s => (
-                <span key={s}
-                  onClick={() => clickSkill(s)}
-                  className={`text-xs px-2 py-1 bg-slate-800 border border-slate-600 rounded text-slate-300 cursor-pointer hover:bg-slate-700 hover:border-amber-500 transition-colors`}
-                  title="Roll Skill">
-                  {s} <span className="text-white font-bold ml-1">
-                    +{mod(localChar.stats[SKILLS_DATA.find(k => k.name === s)?.stat || 'str']) + profBonus}
-                  </span>
-                </span>
-              ))}
             </div>
-          </div>
-
-          {!isEditing && localChar.weapons && (
-            <div className="mb-4">
-              <label className="text-[9px] uppercase font-bold opacity-50 mb-1 block">Weapons (Click to Attack)</label>
-              <div className="flex flex-wrap gap-2">
-                {localChar.weapons.split(',').map(w => w.trim()).filter(w => w).map((w, i) => (
-                  <button key={i} onClick={() => clickWeapon(w)}
-                    className="flex items-center px-2 py-1 bg-red-900/30 border border-red-800 rounded text-xs hover:bg-red-800 hover:text-white transition-colors">
-                    <Swords size={12} className="mr-1" /> {w}
-                  </button>
-                ))}
-              </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {SKILLS.map(skill => {
+                const abilityForSkill = SKILL_ABILITIES[skill];
+                const abilityScore = char.stats[abilityForSkill];
+                const isProficient = char.skills.includes(skill);
+                const bonus = getSkillBonus(abilityScore, isProficient, char.level);
+                
+                return (
+                  <div key={skill} className={`flex justify-between items-center p-2 rounded ${
+                    isProficient 
+                      ? (printerMode ? 'bg-gray-200 border border-black' : 'bg-slate-700') 
+                      : (printerMode ? 'bg-white border border-gray-400' : 'bg-slate-900')
+                  }`}>
+                    <span className={`text-sm ${printerMode ? 'text-black' : 'text-white'}`}>
+                      {isProficient && '⬤ '}{skill}
+                    </span>
+                    <span className={`font-bold ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+                      {formatModifier(bonus)}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
+        </div>
 
-          {(localChar.knownSpells?.length > 0 || isEditing) && (
-            <div className="mb-4">
-              <label className="text-[9px] uppercase font-bold opacity-50 mb-1 block">
-                Known Spells {spellStats && `(DC ${spellStats.dc}, +${spellStats.atk})`}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {(localChar.knownSpells || []).map((s, i) => (
-                  <div key={i} className="flex items-center">
-                    {isEditing ? (
-                      <>
-                        <input className="bg-slate-900 border border-slate-700 rounded p-1 text-xs text-white w-24"
-                          value={s} onChange={e => updateSpell(i, e.target.value)} />
-                        <button onClick={() => removeSpell(i)} className="ml-1 text-red-400 hover:text-red-300">x</button>
-                      </>
-                    ) : (
-                      <button onClick={() => clickSpell(s)}
-                        className="flex items-center px-2 py-1 bg-purple-900/30 border border-purple-800 rounded text-xs hover:bg-purple-800 hover:text-white transition-colors">
-                        <Wand2 size={12} className="mr-1" /> {s}
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {isEditing && (
-                  <button onClick={addSpell} className="text-xs bg-slate-700 px-2 rounded hover:bg-slate-600">
-                    + Spell
+        {/* ========== INSPIRATION & DEATH SAVES ========== */}
+        {!printerMode && (
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            {/* Inspiration */}
+            <div className={`p-3 rounded ${localChar.inspiration ? 'bg-yellow-900 border border-yellow-600' : 'bg-slate-700'}`}>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold text-amber-400">Inspiration</span>
+                {isEditing ? (
+                  <input
+                    type="checkbox"
+                    checked={localChar.inspiration}
+                    onChange={(e) => setLocalChar({ ...localChar, inspiration: e.target.checked })}
+                    className="form-checkbox h-5 w-5"
+                  />
+                ) : (
+                  <button
+                    onClick={() => updateCharacter(char.id, { inspiration: !char.inspiration })}
+                    className={`px-3 py-1 rounded text-sm font-bold ${
+                      char.inspiration 
+                        ? 'bg-yellow-600 hover:bg-yellow-700 text-white'
+                        : 'bg-slate-600 hover:bg-slate-500 text-slate-300'
+                    }`}
+                  >
+                    {char.inspiration ? '★' : '☆'}
                   </button>
                 )}
               </div>
             </div>
+
+            {/* Exhaustion */}
+            <div className="p-3 rounded bg-slate-700">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-semibold text-red-400">Exhaustion</span>
+                <span className="text-lg font-bold text-white">{localChar.exhaustion}/6</span>
+              </div>
+              {isEditing && (
+                <input
+                  type="range"
+                  min="0"
+                  max="6"
+                  value={localChar.exhaustion}
+                  onChange={(e) => setLocalChar({ ...localChar, exhaustion: parseInt(e.target.value) })}
+                  className="w-full"
+                />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Death Saves (only show if unconscious) */}
+        {char.hp === 0 && !printerMode && (
+          <div className="mb-6 p-4 rounded bg-red-900 border border-red-600">
+            <h4 className="font-bold text-red-300 mb-3">Death Saves</h4>
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div>
+                <div className="text-sm text-green-400 mb-1">Successes</div>
+                <div className="flex gap-2">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className={`w-6 h-6 rounded border-2 ${
+                      localChar.deathSaves.successes >= i 
+                        ? 'bg-green-600 border-green-400' 
+                        : 'border-green-600'
+                    }`} />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-red-400 mb-1">Failures</div>
+                <div className="flex gap-2">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className={`w-6 h-6 rounded border-2 ${
+                      localChar.deathSaves.failures >= i 
+                        ? 'bg-red-600 border-red-400' 
+                        : 'border-red-600'
+                    }`} />
+                  ))}
+                </div>
+              </div>
+            </div>
+            {!isEditing && (
+              <button
+                onClick={rollDeathSave}
+                className="w-full bg-red-700 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
+              >
+                Roll Death Save
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ========== SPELL SLOTS (for casters) ========== */}
+        {isSpellcaster(char.class) && char.spellSlots && Object.keys(char.spellSlots).length > 0 && (
+          <div className="mb-6">
+            <h4 className={`font-bold mb-3 ${printerMode ? 'text-black' : 'text-amber-400'}`}>Spell Slots</h4>
+            <div className="grid grid-cols-3 gap-2">
+              {Object.entries(char.spellSlots).map(([level, maxSlots]) => (
+                <div key={level} className={`p-2 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+                  <div className={`text-xs mb-1 ${printerMode ? 'text-black' : 'text-purple-400'}`}>
+                    Level {level}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+                      {char.currentSpellSlots[level] || 0} / {maxSlots}
+                    </span>
+                    {!printerMode && !isEditing && (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => useSpellSlot(level)}
+                          className="bg-red-600 hover:bg-red-700 text-white px-1 text-xs rounded"
+                          disabled={!char.currentSpellSlots[level] || char.currentSpellSlots[level] === 0}
+                        >
+                          -
+                        </button>
+                        <button
+                          onClick={() => restoreSpellSlot(level)}
+                          className="bg-green-600 hover:bg-green-700 text-white px-1 text-xs rounded"
+                          disabled={char.currentSpellSlots[level] >= maxSlots}
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* ========== SPELLS (for casters only) ========== */}
+        {isSpellcaster(char.class) && (
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-3">
+              <h4 className={`font-bold ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+                Spells ({char.spells.length})
+              </h4>
+              {!printerMode && isEditing && (
+                <button
+                  onClick={() => setShowFullSpells(!showFullSpells)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm"
+                >
+                  {showFullSpells ? 'Hide' : 'Add'} Spells
+                </button>
+              )}
+            </div>
+
+            {/* Spell Adding Interface */}
+            {isEditing && showFullSpells && (
+              <div className={`mb-4 p-4 rounded ${printerMode ? 'border border-black' : 'bg-slate-900 border border-purple-500'}`}>
+                <h5 className={`font-bold mb-2 ${printerMode ? 'text-black' : 'text-purple-400'}`}>
+                  Add Spells from Compendium
+                </h5>
+                
+                {/* Filters */}
+                <div className="flex gap-2 mb-3">
+                  <select
+                    value={selectedSpellLevel}
+                    onChange={(e) => setSelectedSpellLevel(parseInt(e.target.value))}
+                    className={`${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-800 text-white border border-slate-600'} rounded px-2 py-1 text-sm`}
+                  >
+                    <option value={0}>Cantrips</option>
+                    {[1,2,3,4,5,6,7,8,9].map(lvl => (
+                      <option key={lvl} value={lvl}>Level {lvl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Spell List */}
+                <div className="max-h-64 overflow-y-auto space-y-2">
+                  {SPELL_COMPENDIUM
+                    .filter(spell => spell.level === selectedSpellLevel)
+                    .filter(spell => spell.classes.includes(localChar.class))
+                    .map(spell => (
+                      <div key={spell.name} className={`p-2 rounded ${printerMode ? 'border border-gray-400' : 'bg-slate-800'} flex justify-between items-start`}>
+                        <div className="flex-1">
+                          <div className={`font-semibold text-sm ${printerMode ? 'text-black' : 'text-purple-300'}`}>
+                            {spell.name}
+                          </div>
+                          <div className={`text-xs ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
+                            {spell.school} • {spell.castingTime} • {spell.range}
+                          </div>
+                          <div className={`text-xs mt-1 ${printerMode ? 'text-black' : 'text-slate-300'}`}>
+                            {spell.description}
+                          </div>
+                        </div>
+                        {localChar.spells.includes(spell.name) ? (
+                          <button
+                            onClick={() => removeSpellFromCharacter(spell.name)}
+                            className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs ml-2"
+                          >
+                            Remove
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => addSpellToCharacter(spell.name)}
+                            className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs ml-2"
+                          >
+                            Add
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Known Spells Display */}
+            <div className="space-y-2">
+              {char.spells.length === 0 ? (
+                <p className={`text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'} italic`}>
+                  No spells prepared
+                </p>
+              ) : (
+                char.spells.map(spellName => {
+                  const spell = SPELL_COMPENDIUM.find(s => s.name === spellName);
+                  if (!spell) return null;
+                  
+                  return (
+                    <div key={spellName} className={`p-3 rounded ${printerMode ? 'border border-black' : 'bg-slate-700'}`}>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className={`font-semibold ${printerMode ? 'text-black' : 'text-purple-300'}`}>
+                            {spell.name}
+                            <span className={`ml-2 text-xs ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
+                              {spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`}
+                            </span>
+                          </div>
+                          <div className={`text-xs ${printerMode ? 'text-gray-700' : 'text-slate-400'} mt-1`}>
+                            {spell.school} • {spell.castingTime} • {spell.range}
+                          </div>
+                          <div className={`text-sm mt-2 ${printerMode ? 'text-black' : 'text-slate-300'}`}>
+                            {spell.description}
+                          </div>
+                          <div className={`text-xs mt-1 ${printerMode ? 'text-gray-600' : 'text-slate-500'}`}>
+                            Components: {spell.components} • Duration: {spell.duration}
+                          </div>
+                        </div>
+                        {isEditing && !printerMode && (
+                          <button
+                            onClick={() => removeSpellFromCharacter(spellName)}
+                            className="bg-red-600 hover:bg-red-700 text-white p-1 rounded ml-2"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========== EQUIPMENT ========== */}
+        <div className="mb-6">
+          <h4 className={`font-bold mb-3 ${printerMode ? 'text-black' : 'text-amber-400'}`}>Equipment</h4>
+          {isEditing ? (
+            <textarea
+              value={localChar.equipment.join('\n')}
+              onChange={(e) => setLocalChar({ 
+                ...localChar, 
+                equipment: e.target.value.split('\n').filter(item => item.trim())
+              })}
+              placeholder="Enter equipment (one per line)"
+              className={`w-full h-32 ${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white border border-slate-600'} rounded p-2 text-sm`}
+            />
+          ) : (
+            <div className={`${printerMode ? 'border border-black' : 'bg-slate-700'} rounded p-3`}>
+              {char.equipment.length === 0 ? (
+                <p className={`text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'} italic`}>
+                  No equipment listed
+                </p>
+              ) : (
+                <ul className="list-disc list-inside space-y-1">
+                  {char.equipment.map((item, idx) => (
+                    <li key={idx} className={`text-sm ${printerMode ? 'text-black' : 'text-white'}`}>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="bg-slate-800/50 p-2 rounded border border-slate-700">
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="text-xs font-bold uppercase text-slate-400">
-                  <Backpack size={12} className="inline mr-1" /> Inventory
-                </h4>
-                <span className="text-[9px] opacity-70">{getTotalWeight()} lbs</span>
+          {/* Attunement Slots */}
+          {!printerMode && (
+            <div className="mt-3">
+              <div className="text-sm text-slate-400 mb-2">
+                Attuned Items ({localChar.attunedItems.length}/3)
               </div>
-              <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-                {(localChar.inventory || []).map((item, idx) => (
-                  <div key={idx} className="flex items-center text-xs space-x-1">
-                    {isEditing ? (
-                      <>
-                        <input className={`flex-1 p-1 rounded bg-slate-900 border-none text-white h-6`}
-                          value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} />
-                        <input type="number" className={`w-12 p-1 rounded bg-slate-900 border-none text-white h-6 text-center`}
-                          value={item.weight} onChange={e => updateItem(idx, 'weight', e.target.value)} />
-                        <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-300">
-                          <Trash2 size={12} />
-                        </button>
-                      </>
-                    ) : (
-                      <div className="flex justify-between w-full px-1">
-                        <span>{item.name}</span>
-                        <span className="opacity-50">{item.weight} lb</span>
+              {isEditing ? (
+                <div className="space-y-1">
+                  {localChar.equipment.map((item, idx) => (
+                    <label key={idx} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={localChar.attunedItems.includes(item)}
+                        onChange={() => toggleAttunement(item)}
+                        className="form-checkbox"
+                      />
+                      <span className="text-white">{item}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {localChar.attunedItems.map((item, idx) => (
+                    <span key={idx} className="bg-purple-600 text-white px-2 py-1 rounded text-xs">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ========== FEATURES & TRAITS ========== */}
+        <div className="mb-6">
+          <h4 className={`font-bold mb-3 ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+            Features & Traits
+          </h4>
+          {isEditing ? (
+            <textarea
+              value={localChar.features.join('\n')}
+              onChange={(e) => setLocalChar({ 
+                ...localChar, 
+                features: e.target.value.split('\n').filter(f => f.trim())
+              })}
+              placeholder="Enter features & traits (one per line)"
+              className={`w-full h-32 ${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white border border-slate-600'} rounded p-2 text-sm`}
+            />
+          ) : (
+            <div className={`${printerMode ? 'border border-black' : 'bg-slate-700'} rounded p-3`}>
+              {char.features.length === 0 ? (
+                <p className={`text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'} italic`}>
+                  No features listed
+                </p>
+              ) : (
+                <ul className="list-disc list-inside space-y-1">
+                  {char.features.map((feature, idx) => (
+                    <li key={idx} className={`text-sm ${printerMode ? 'text-black' : 'text-white'}`}>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ========== PERSONALITY TRAITS ========== */}
+        {!printerMode && (
+          <div className="mb-6">
+            <h4 className="font-bold mb-3 text-amber-400">Personality</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Personality Traits</label>
+                {isEditing ? (
+                  <textarea
+                    value={localChar.personalityTraits || ""}
+                    onChange={(e) => setLocalChar({ ...localChar, personalityTraits: e.target.value })}
+                    placeholder="Kind, brave, curious..."
+                    className="w-full h-16 bg-slate-900 text-white border border-slate-600 rounded p-2 text-sm"
+                  />
+                ) : (
+                  <div className="bg-slate-700 rounded p-2 text-sm text-white min-h-[3rem]">
+                    {char.personalityTraits || <span className="text-slate-400 italic">None listed</span>}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Ideals</label>
+                {isEditing ? (
+                  <textarea
+                    value={localChar.ideals || ""}
+                    onChange={(e) => setLocalChar({ ...localChar, ideals: e.target.value })}
+                    placeholder="Justice, freedom, power..."
+                    className="w-full h-16 bg-slate-900 text-white border border-slate-600 rounded p-2 text-sm"
+                  />
+                ) : (
+                  <div className="bg-slate-700 rounded p-2 text-sm text-white min-h-[3rem]">
+                    {char.ideals || <span className="text-slate-400 italic">None listed</span>}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Bonds</label>
+                {isEditing ? (
+                  <textarea
+                    value={localChar.bonds || ""}
+                    onChange={(e) => setLocalChar({ ...localChar, bonds: e.target.value })}
+                    placeholder="Family, mentor, homeland..."
+                    className="w-full h-16 bg-slate-900 text-white border border-slate-600 rounded p-2 text-sm"
+                  />
+                ) : (
+                  <div className="bg-slate-700 rounded p-2 text-sm text-white min-h-[3rem]">
+                    {char.bonds || <span className="text-slate-400 italic">None listed</span>}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Flaws</label>
+                {isEditing ? (
+                  <textarea
+                    value={localChar.flaws || ""}
+                    onChange={(e) => setLocalChar({ ...localChar, flaws: e.target.value })}
+                    placeholder="Reckless, greedy, arrogant..."
+                    className="w-full h-16 bg-slate-900 text-white border border-slate-600 rounded p-2 text-sm"
+                  />
+                ) : (
+                  <div className="bg-slate-700 rounded p-2 text-sm text-white min-h-[3rem]">
+                    {char.flaws || <span className="text-slate-400 italic">None listed</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========== NOTES ========== */}
+        <div className="mb-6">
+          <h4 className={`font-bold mb-3 ${printerMode ? 'text-black' : 'text-amber-400'}`}>Notes</h4>
+          {isEditing ? (
+            <textarea
+              value={localChar.notes}
+              onChange={(e) => setLocalChar({ ...localChar, notes: e.target.value })}
+              placeholder="Character notes, backstory, goals..."
+              className={`w-full h-32 ${printerMode ? 'bg-white border border-black text-black' : 'bg-slate-900 text-white border border-slate-600'} rounded p-2 text-sm`}
+            />
+          ) : (
+            <div className={`${printerMode ? 'border border-black' : 'bg-slate-700'} rounded p-3`}>
+              {char.notes ? (
+                <p className={`text-sm ${printerMode ? 'text-black' : 'text-white'} whitespace-pre-wrap`}>
+                  {char.notes}
+                </p>
+              ) : (
+                <p className={`text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'} italic`}>
+                  No notes
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ========== XP & MILESTONES ========== */}
+        {!printerMode && (
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-2">
+              <h4 className="font-bold text-amber-400">Experience</h4>
+              {isEditing && (
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={localChar.useMilestones}
+                    onChange={(e) => setLocalChar({ ...localChar, useMilestones: e.target.checked })}
+                    className="form-checkbox"
+                  />
+                  Use Milestone Leveling
+                </label>
+              )}
+            </div>
+            
+            {!localChar.useMilestones && (
+              <div className={`${printerMode ? 'border border-black' : 'bg-slate-700'} rounded p-3`}>
+                {isEditing ? (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-slate-300">XP:</label>
+                    <input
+                      type="number"
+                      value={localChar.xp}
+                      onChange={(e) => setLocalChar({ ...localChar, xp: parseInt(e.target.value) || 0 })}
+                      className="bg-slate-900 text-white border border-slate-600 rounded px-2 py-1 w-24"
+                    />
+                  </div>
+                ) : (
+                  <div className="text-white">
+                    <span className="text-2xl font-bold">{char.xp.toLocaleString()}</span>
+                    <span className="text-sm text-slate-400 ml-2">XP</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========== LONG REST BUTTON ========== */}
+        {!printerMode && !isEditing && (
+          <button
+            onClick={longRest}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded transition flex items-center justify-center gap-2"
+          >
+            <Sparkles className="w-5 h-5" />
+            Long Rest
+            <span className="text-xs opacity-75">(Restore HP & Spell Slots)</span>
+          </button>
+        )}
+      </div>
+    );
+  };
+  // ========== MAIN RENDER ==========
+  return (
+    <div className={`min-h-screen ${printerMode ? 'bg-white' : 'bg-gradient-to-br from-slate-900 to-slate-800'} pb-20`}>
+      {/* ========== HEADER ========== */}
+      <header className={`${printerMode ? 'bg-white border-b-2 border-black' : 'bg-slate-800 border-b border-amber-700'} p-4 sticky top-0 z-50 shadow-lg`}>
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Sword className={`w-8 h-8 ${printerMode ? 'text-black' : 'text-amber-500'}`} />
+            <h1 className={`text-2xl font-bold ${printerMode ? 'text-black' : 'text-amber-500'}`}>
+              D&D Companion
+            </h1>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {!printerMode && (
+              <>
+                <span className="text-slate-300 text-sm">
+                  {user.email || 'Guest User'}
+                </span>
+                <button
+                  onClick={() => setPrinterMode(true)}
+                  className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded"
+                  title="Printer-Friendly Mode"
+                >
+                  <Printer className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold"
+                >
+                  Sign Out
+                </button>
+              </>
+            )}
+            {printerMode && (
+              <button
+                onClick={() => setPrinterMode(false)}
+                className="bg-black text-white px-4 py-2 rounded font-semibold"
+              >
+                Exit Print Mode
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ========== NAVIGATION TABS ========== */}
+        {!printerMode && (
+          <div className="max-w-7xl mx-auto mt-4 flex gap-2 overflow-x-auto">
+            {[
+              { id: 'campaigns', label: 'Campaigns', icon: Map },
+              { id: 'characters', label: 'Characters', icon: Users },
+              { id: 'combat', label: 'Combat', icon: Swords },
+              { id: 'dice', label: 'Dice Roller', icon: Dices },
+              { id: 'compendium', label: 'Compendium', icon: Book },
+              { id: 'notes', label: 'Notes', icon: FileText }
+            ].map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded font-semibold whitespace-nowrap transition ${
+                    activeTab === tab.id
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </header>
+
+      {/* ========== MAIN CONTENT ========== */}
+      <main className="max-w-7xl mx-auto p-4">
+        {/* ========== CAMPAIGNS TAB ========== */}
+        {activeTab === 'campaigns' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className={`text-3xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+                Campaigns
+              </h2>
+              {!printerMode && (
+                <button
+                  onClick={() => {
+                    const name = prompt("Campaign name:");
+                    if (name) {
+                      const description = prompt("Campaign description (optional):");
+                      createCampaign(name, description || "");
+                    }
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Campaign
+                </button>
+              )}
+            </div>
+
+            {campaigns.length === 0 ? (
+              <div className={`text-center py-12 ${printerMode ? 'bg-gray-100 border border-black' : 'bg-slate-800'} rounded-lg`}>
+                <Map className={`w-16 h-16 ${printerMode ? 'text-gray-400' : 'text-slate-600'} mx-auto mb-4`} />
+                <p className={`${printerMode ? 'text-gray-700' : 'text-slate-400'} text-lg`}>
+                  No campaigns yet. Create one to get started!
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {campaigns.map(campaign => (
+                  <div
+                    key={campaign.id}
+                    className={`${printerMode ? 'bg-white border-2 border-black' : 'bg-slate-800 border border-amber-700'} rounded-lg p-6 shadow-xl`}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <h3 className={`text-2xl font-bold mb-2 ${printerMode ? 'text-black' : 'text-white'}`}>
+                          {campaign.name}
+                        </h3>
+                        {campaign.description && (
+                          <p className={`${printerMode ? 'text-gray-700' : 'text-slate-300'} mb-3`}>
+                            {campaign.description}
+                          </p>
+                        )}
+                        <p className={`text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
+                          Created: {new Date(campaign.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {!printerMode && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedCampaign(campaign.id === selectedCampaign ? null : campaign.id)}
+                            className={`px-4 py-2 rounded font-semibold ${
+                              selectedCampaign === campaign.id
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                            }`}
+                          >
+                            {selectedCampaign === campaign.id ? 'Selected' : 'Select'}
+                          </button>
+                          <button
+                            onClick={() => deleteCampaign(campaign.id)}
+                            className="bg-red-600 hover:bg-red-700 text-white p-2 rounded"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Campaign Module Selection */}
+                    {!printerMode && selectedCampaign === campaign.id && (
+                      <div className="mt-4 pt-4 border-t border-slate-700">
+                        <label className="text-sm text-slate-400 mb-2 block">Campaign Module:</label>
+                        <select
+                          value={campaign.module || "Random"}
+                          onChange={(e) => {
+                            updateCampaign(campaign.id, { module: e.target.value });
+                            setSelectedModule(e.target.value);
+                          }}
+                          className="bg-slate-900 text-white border border-slate-600 rounded px-3 py-2 w-full"
+                        >
+                          {Object.keys(CAMPAIGN_MODULES).map(moduleName => (
+                            <option key={moduleName} value={moduleName}>
+                              {moduleName}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-slate-400 mt-2">
+                          {CAMPAIGN_MODULES[campaign.module || "Random"].description}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Campaign Characters */}
+                    <div className="mt-4">
+                      <h4 className={`font-semibold mb-2 ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+                        Party Members ({campaign.characterIds?.length || 0})
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {campaign.characterIds?.map(charId => {
+                          const char = characters.find(c => c.id === charId);
+                          return char ? (
+                            <span
+                              key={charId}
+                              className={`${printerMode ? 'bg-gray-200 text-black border border-black' : 'bg-slate-700 text-white'} px-3 py-1 rounded text-sm`}
+                            >
+                              {char.name} ({char.class} {char.level})
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Quick Encounter Builder from Module */}
+                    {!printerMode && selectedCampaign === campaign.id && CAMPAIGN_MODULES[campaign.module || "Random"].encounters && (
+                      <div className="mt-4 pt-4 border-t border-slate-700">
+                        <h4 className="font-semibold mb-3 text-amber-400">
+                          Module Encounters
+                        </h4>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {CAMPAIGN_MODULES[campaign.module || "Random"].encounters.map((enc, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-slate-900 rounded p-3 border border-slate-700"
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex-1">
+                                  <h5 className="font-semibold text-white">
+                                    {enc.name}
+                                    <span className="ml-2 text-xs text-amber-400">
+                                      (Level {enc.level})
+                                    </span>
+                                  </h5>
+                                  <p className="text-sm text-slate-400 mt-1">{enc.text}</p>
+                                </div>
+                                <button
+                                  onClick={() => buildQuickEncounter(enc)}
+                                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm ml-3"
+                                >
+                                  Start
+                                </button>
+                              </div>
+                              <div className="text-xs text-slate-500 mt-2">
+                                Monsters: {enc.monsters.join(', ')}
+                              </div>
+                              {enc.notes && (
+                                <div className="text-xs text-slate-400 mt-1 italic">
+                                  💡 {enc.notes}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
-              {isEditing && (
-                <button onClick={addItem} className="w-full mt-2 text-[10px] bg-slate-700 py-1 rounded hover:bg-slate-600">
-                  + Add Item
+            )}
+          </div>
+        )}
+
+        {/* ========== CHARACTERS TAB ========== */}
+        {activeTab === 'characters' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className={`text-3xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+                Characters
+              </h2>
+              {!printerMode && (
+                <button
+                  onClick={() => setShowCharacterForm(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Character
                 </button>
               )}
             </div>
 
-            <div className="bg-slate-800/50 p-2 rounded border border-slate-700">
-              <h4 className="text-xs font-bold uppercase mb-1 text-slate-400">
-                <Anchor size={12} className="inline mr-1" /> Mount
-              </h4>
-              {isEditing ? (
-                <div className="grid grid-cols-3 gap-1">
-                  <input placeholder="Name" className="col-span-3 bg-slate-900 border-none rounded p-1 text-xs text-white"
-                    value={localChar.mount?.name || ''}
-                    onChange={e => setLocalChar({ ...localChar, mount: { ...localChar.mount, name: e.target.value } })} />
-                  <input placeholder="HP" className="bg-slate-900 border-none rounded p-1 text-xs text-white"
-                    value={localChar.mount?.hp || ''}
-                    onChange={e => setLocalChar({ ...localChar, mount: { ...localChar.mount, hp: e.target.value } })} />
-                  <input placeholder="Spd" className="bg-slate-900 border-none rounded p-1 text-xs text-white"
-                    value={localChar.mount?.speed || ''}
-                    onChange={e => setLocalChar({ ...localChar, mount: { ...localChar.mount, speed: e.target.value } })} />
-                  <input placeholder="AC" className="bg-slate-900 border-none rounded p-1 text-xs text-white"
-                    value={localChar.mount?.ac || ''}
-                    onChange={e => setLocalChar({ ...localChar, mount: { ...localChar.mount, ac: e.target.value } })} />
+            {/* Character Creation Form */}
+            {showCharacterForm && !printerMode && (
+              <div className="bg-slate-800 border border-amber-700 rounded-lg p-6 shadow-xl mb-6">
+                <h3 className="text-2xl font-bold text-white mb-4">Create New Character</h3>
+                
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Name</label>
+                    <input
+                      type="text"
+                      value={newCharacter.name}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, name: e.target.value })}
+                      placeholder="Character name"
+                      className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Race</label>
+                    <select
+                      value={newCharacter.race}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, race: e.target.value })}
+                      className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    >
+                      {RACES.map(race => (
+                        <option key={race} value={race}>{race}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Class</label>
+                    <select
+                      value={newCharacter.class}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, class: e.target.value })}
+                      className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    >
+                      {CLASSES.map(cls => (
+                        <option key={cls} value={cls}>{cls}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Background</label>
+                    <select
+                      value={newCharacter.background}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, background: e.target.value })}
+                      className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    >
+                      {BACKGROUNDS.map(bg => (
+                        <option key={bg} value={bg}>{bg}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Alignment</label>
+                    <select
+                      value={newCharacter.alignment}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, alignment: e.target.value })}
+                      className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    >
+                      {ALIGNMENTS.map(align => (
+                        <option key={align} value={align}>{align}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Level</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={newCharacter.level}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, level: parseInt(e.target.value) || 1 })}
+                      className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    />
+                  </div>
                 </div>
-              ) : (
-                localChar.mount?.name ? (
-                  <div className="text-xs">
-                    <div className="font-bold text-amber-400">{localChar.mount.name}</div>                
-                    <div className="opacity-70">
-                  HP: {localChar.mount.hp} | AC: {localChar.mount.ac} | Spd: {localChar.mount.speed}
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs opacity-40 italic">No mount.</div>
-            )
-          )}
-        </div>
-      </div>
 
-      {isEditing && (
-        <div className="mb-4 p-2 bg-slate-800/50 rounded border border-slate-700">
-          <div className="flex space-x-2 mb-2">
-            <div className="flex-1">
-              <label className="text-[9px] uppercase font-bold opacity-50 block">Race / Class</label>
-              <div className="flex space-x-1">
-                <select className={`w-1/2 p-1 text-xs rounded ${getInputClass(false)}`}
-                  value={localChar.race}
-                  onChange={e => setLocalChar({ ...localChar, race: e.target.value })}>
-                  {RACES.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-                <select className={`w-1/2 p-1 text-xs rounded ${getInputClass(false)}`}
-                  value={localChar.class}
-                  onChange={e => setLocalChar({ ...localChar, class: e.target.value })}>
-                  {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <button onClick={autoFillTraits}
-                className="mt-1 w-full bg-indigo-700 hover:bg-indigo-600 text-white text-[10px] py-1 rounded flex items-center justify-center shadow">
-                <Zap size={10} className="mr-1" /> Fill Traits
-              </button>
-            </div>
-            <div className="flex-1">
-              <label className="text-[9px] uppercase font-bold opacity-50 block">XP Editor</label>
-              <div className="flex space-x-1">
-                <input type="number" className={`w-full p-1 text-xs rounded ${getInputClass(false)}`}
-                  placeholder="Total XP" value={localChar.xp || 0}
-                  onChange={e => setLocalChar({ ...localChar, xp: parseInt(e.target.value) || 0 })} />
-                <div className="flex space-x-1">
-                  {[10, 50, 100].map(amt => (
-                    <button key={amt} type="button"
-                      onClick={() => setLocalChar({ ...localChar, xp: (localChar.xp || 0) + amt })}
-                      className="px-1 bg-slate-700 text-[9px] text-white rounded hover:bg-slate-600">
-                      +{amt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          <label className="text-[9px] uppercase font-bold opacity-50 block mb-1">Conditions</label>
-          <div className="flex flex-wrap gap-1">
-            {CONDITIONS.map(c => (
-              <button key={c} onClick={() => toggleCondition(c)}
-                className={`px-2 py-0.5 text-[9px] rounded border transition-colors ${localChar.conditions?.includes(c) ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-900 border-slate-600 text-slate-400 hover:bg-slate-800'
-                  }`}>
-                {c}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {renderTraits()}
-
-      {isEditing && (
-        <div className="mb-4 p-2 bg-slate-900/50 rounded border border-slate-700">
-          <div className="text-[10px] uppercase font-bold text-slate-400 mb-2">Add Custom Trait</div>
-          <div className="flex space-x-2 mb-2">
-            <input className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white"
-              placeholder="Trait Name" value={newTrait.name}
-              onChange={e => setNewTrait({ ...newTrait, name: e.target.value })} />
-            <select className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white"
-              value={newTrait.type} onChange={e => setNewTrait({ ...newTrait, type: e.target.value })}>
-              <option value="race">Race</option>
-              <option value="class">Class</option>
-              <option value="feat">Feat</option>
-            </select>
-          </div>
-          <textarea className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white mb-2"
-            rows="2" placeholder="Description..." value={newTrait.desc}
-            onChange={e => setNewTrait({ ...newTrait, desc: e.target.value })} />
-          <button onClick={addTrait} className="w-full bg-slate-700 hover:bg-slate-600 text-xs py-1 rounded">
-            Add Custom Trait
-          </button>
-        </div>
-      )}
-
-      <div className="flex justify-between items-center pt-2 border-t border-slate-700/50">
-        <div className="flex space-x-2">
-          <button onClick={handleDelete}
-            className={`text-xs hover:text-red-300 flex items-center ${confirmDelete ? 'text-red-600 font-bold' : 'text-red-400'}`}>
-            <Trash2 size={12} className="mr-1" />
-            {confirmDelete ? "Confirm?" : "Delete"}
-          </button>
-        </div>
-        <div className="flex space-x-2">
-          {isEditing ? (
-            <button onClick={handleSave}
-              className="flex items-center px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-bold shadow">
-              <Save size={12} className="mr-1" /> Save
-            </button>
-          ) : (
-            <button onClick={() => setIsEditing(true)}
-              className="flex items-center px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold shadow">
-              <Edit2 size={12} className="mr-1" /> Edit
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )}
-</div>
-);
-};
-// --- Auth Screen ---
-const AuthScreen = () => {
-const [isRegistering, setIsRegistering] = useState(false);
-const [email, setEmail] = useState("");
-const [password, setPassword] = useState("");
-const [error, setError] = useState("");
-const handleAuth = async (e) => {
-e.preventDefault();
-setError("");
-try {
-if (isRegistering) await createUserWithEmailAndPassword(auth, email, password);
-else await signInWithEmailAndPassword(auth, email, password);
-} catch (err) { setError(err.message); }
-};
-const handleGuest = async () => {
-try { await signInAnonymously(auth); } catch (err) { setError("Guest login failed. " + err.message); }
-};
-return (
-<div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-200 p-4">
-<div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl">
-<div className="flex flex-col items-center mb-8">
-<div className="bg-amber-600 p-3 rounded-xl mb-4 shadow-lg shadow-amber-900/20">
-<Dices size={40} className="text-slate-900" />
-</div>
-<h1 className="text-3xl font-bold text-white tracking-wider">DM's COMPANION</h1>
-<p className="text-slate-500 text-sm">Your complete digital dungeon master toolkit</p>
-</div>
-<form onSubmit={handleAuth} className="space-y-4">
-<div>
-<label className="block text-xs font-bold uppercase text-slate-500 mb-1">Email</label>
-<div className="relative">
-<Mail className="absolute left-3 top-2.5 text-slate-500" size={16} />
-<input type="email"
-className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-white focus:border-amber-500 focus:outline-none transition-colors"
-placeholder="wizard@dnd.com" value={email} onChange={e => setEmail(e.target.value)} required />
-</div>
-</div>
-<div>
-<label className="block text-xs font-bold uppercase text-slate-500 mb-1">Password</label>
-<div className="relative">
-<Key className="absolute left-3 top-2.5 text-slate-500" size={16} />
-<input type="password"
-className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-white focus:border-amber-500 focus:outline-none transition-colors"
-placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
-</div>
-</div>
-{error && (
-<div className="text-red-500 text-xs bg-red-900/20 p-2 rounded border border-red-900/50">
-{error}
-</div>
-)}
-<button type="submit"
-         className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 rounded-lg shadow-lg transition-transform active:scale-95 flex items-center justify-center">
-{isRegistering ? <UserPlus size={18} className="mr-2" /> : <LogIn size={18} className="mr-2" />}
-{isRegistering ? "Create Account" : "Sign In"}
-</button>
-</form>
-<div className="mt-6 flex flex-col items-center space-y-4">
-<button onClick={() => setIsRegistering(!isRegistering)}
-className="text-xs text-amber-500 hover:text-amber-400 font-bold">
-{isRegistering ? "Already have an account? Login" : "Need an account? Register"}
-</button>
-<div className="w-full flex items-center space-x-4">
-<div className="h-px bg-slate-800 flex-1"></div>
-<span className="text-slate-600 text-xs">OR</span>
-<div className="h-px bg-slate-800 flex-1"></div>
-</div>
-<button onClick={handleGuest} className="text-xs text-slate-500 hover:text-white flex items-center">
-<EyeOff size={14} className="mr-1" /> Continue as Guest
-</button>
-</div>
-</div>
-</div>
-);
-};
-// --- Main Component ---
-export default function DnDCompanion() {
-const [user, setUser] = useState(null);
-const [loadingAuth, setLoadingAuth] = useState(true);
-const [activeTab, setActiveTab] = useState('party');
-const [printerMode, setPrinterMode] = useState(false);
-const [currentCampaign, setCurrentCampaign] = useState("Main Adventure");
-const [campaignList, setCampaignList] = useState(["Main Adventure"]);
-const [showCampaignModal, setShowCampaignModal] = useState(false);
-const [newCampaignInput, setNewCampaignInput] = useState("");
-const [targetCampaignForClone, setTargetCampaignForClone] = useState("");
-const [characterToClone, setCharacterToClone] = useState(null);
-const [compendiumType, setCompendiumType] = useState('monsters');
-const [searchTerm, setSearchTerm] = useState("");
-const [spellClassFilter, setSpellClassFilter] = useState("All");
-const [spellTagFilter, setSpellTagFilter] = useState("All");
-const [spellFilterClass, setSpellFilterClass] = useState(null);
-const [spellFilterSource, setSpellFilterSource] = useState(null);
-const [encPartyLevel, setEncPartyLevel] = useState(1);
-const [encPartySize, setEncPartySize] = useState(4);
-const [encDifficulty, setEncDifficulty] = useState(1);
-const [encTheme, setEncTheme] = useState("Any");
-const [encClusterSize, setEncClusterSize] = useState("Any");
-const [generatedEncounter, setGeneratedEncounter] = useState([]);
-const [encounterXP, setEncounterXP] = useState(0);
-const [encounterBudget, setEncounterBudget] = useState(0);
-const [campaignNotes, setCampaignNotes] = useState({ title: "", content: "" });
-const [campaignDocId, setCampaignDocId] = useState(null);
-const [allCharacters, setAllCharacters] = useState([]);
-const [characters, setCharacters] = useState([]);
-const [diceLog, setDiceLog] = useState([]);
-const [notification, setNotification] = useState(null);
-const [sortMode, setSortMode] = useState('initiative');
-const [activeCombat, setActiveCombat] = useState(null);
-const [campaignMode, setCampaignMode] = useState("Random");
-const [campaignIndex, setCampaignIndex] = useState(0);
-const [combatTurn, setCombatTurn] = useState(0);
-const [weather, setWeather] = useState(null);
-const [showLootGenerator, setShowLootGenerator] = useState(false);
-const [showNPCGenerator, setShowNPCGenerator] = useState(false);
-useEffect(() => {
-const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); setLoadingAuth(false); });
-return () => unsubscribe();
-}, []);
-useEffect(() => {
-if (!user) return;
-const qChars = query(collection(db, 'artifacts', appId, 'users', user.uid, 'characters'));
-const unsubChars = onSnapshot(qChars, (snapshot) => {
-const chars = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-setAllCharacters(chars);
-const distinctCampaigns = new Set(["Main Adventure"]);
-chars.forEach(c => { if (c.campaign) distinctCampaigns.add(c.campaign); });
-setCampaignList(Array.from(distinctCampaigns).sort());
-});
-const diceQ = query(collection(db, 'artifacts', appId, 'users', user.uid, 'dicelog'));
-const unsubDice = onSnapshot(diceQ, (snapshot) => {
-let logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-logs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-setDiceLog(logs.slice(0, 100));
-});
-const campQ = query(collection(db, 'artifacts', appId, 'users', user.uid, 'campaigns'));
-const unsubCamp = onSnapshot(campQ, (snapshot) => {
-const notes = snapshot.docs.map(d => ({ id: d.id, ...d.data() })).find(c => c.campaignName === currentCampaign);
-if (notes) { setCampaignNotes(notes); setCampaignDocId(notes.id); }
-else { setCampaignNotes({ title: "", content: "" }); setCampaignDocId(null); }
-});
-return () => { unsubChars(); unsubDice(); unsubCamp(); };
-}, [user, currentCampaign]);
-useEffect(() => {
-const filtered = allCharacters.filter(c => {
-if (!c.campaign && currentCampaign === "Main Adventure") return true;
-return c.campaign === currentCampaign;
-});
-filtered.sort((a, b) => {
-if (sortMode === 'initiative') {
-if ((b.initiative || 0) !== (a.initiative || 0)) return (b.initiative || 0) - (a.initiative || 0);
-return a.name.localeCompare(b.name);
-}
-return a.name.localeCompare(b.name);
-});
-setCharacters(filtered);
-}, [allCharacters, currentCampaign, sortMode]);
-const showNotification = (msg) => { setNotification(msg); setTimeout(() => setNotification(null), 3000); };
-const handleRoll = async (charName, label, mod, diceString = null) => {
-if (!user) return;
-let result = 0;
-let detail = "";
-let natMsg = "";
-if (diceString) {
-  const match = diceString.match(/(\d+)d(\d+)([+-]\d+)?/);
-  if (!match) return;
-
-  const [, count, faces, bonus] = match;
-  const numCount = parseInt(count);
-  const numFaces = parseInt(faces);
-  const numBonus = bonus ? parseInt(bonus) : 0;
-
-  let rolls = [];
-  for (let i = 0; i < numCount; i++) {
-    rolls.push(Math.floor(Math.random() * numFaces) + 1);
-  }
-  const sum = rolls.reduce((a, b) => a + b, 0);
-  result = sum + numBonus;
-
-  if (numFaces === 20 && numCount === 1) {
-    if (rolls[0] === 20) natMsg = " 🎯 CRITICAL!";
-    if (rolls[0] === 1) natMsg = " ❌ FAIL!";
-  }
-
-  detail = `${label}: [${rolls.join(',')}]${numBonus !== 0 ? ` ${numBonus >= 0 ? '+' : ''}${numBonus}` : ''} = ${result}`;
-} else {
-  const d20 = Math.floor(Math.random() * 20) + 1;
-  result = d20 + mod;
-  if (d20 === 20) natMsg = " 🎯 NAT 20!";
-  if (d20 === 1) natMsg = " ❌ NAT 1!";
-  detail = `${label}: [${d20}] + ${mod} = ${result}`;
-}
-
-await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'dicelog'), {
-  roller: charName,
-  sides: diceString ? 0 : 20,
-  result,
-  detail,
-  timestamp: serverTimestamp(),
-  campaign: currentCampaign
-});
-
-showNotification(`${charName}: ${detail}${natMsg}`);
-};
-const handleGenericRoll = async (charName, label, result) => {
-if (!user) return;
-await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'dicelog'), {
-roller: charName,
-sides: 0,
-result: 0,
-detail: label,
-timestamp: serverTimestamp(),
-campaign: currentCampaign
-});
-showNotification(`${charName}: ${label}`);
-};
-const addCharacter = async (autoRoll = false) => {
-if (!user) return;
-const randomClass = CLASSES[Math.floor(Math.random() * CLASSES.length)];
-const randomRace = RACES[Math.floor(Math.random() * RACES.length)];
-const chosenClass = autoRoll ? randomClass : "Fighter";
-const chosenRace = autoRoll ? randomRace : "Human";
-let stats = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
-if (autoRoll) stats = {
-str: rollStatValue(), dex: rollStatValue(), con: rollStatValue(),
-int: rollStatValue(), wis: rollStatValue(), cha: rollStatValue()
-};
-const defaults = CLASS_DEFAULTS[chosenClass] || CLASS_DEFAULTS["Fighter"];
-const profs = { saves: {}, skills: autoRoll ? defaults.skills : [] };
-defaults.saves.forEach(s => profs.saves[s] = true);
-const inventory = (autoRoll ? defaults.gear : ["Backpack", "Rations (5)"]).map(name => ({ name, weight: 2 }));
-const knownSpells = autoRoll && defaults.spells ? defaults.spells : [];
-
-let ac = 10 + Math.floor((stats.dex - 10) / 2);
-if (defaults.armor === "Chain Mail") ac = 16;
-if (defaults.armor === "Scale Mail") ac = 14 + Math.min(2, Math.floor((stats.dex - 10) / 2));
-if (defaults.armor === "Leather") ac = 11 + Math.floor((stats.dex - 10) / 2);
-if (chosenClass === "Monk") ac = 10 + Math.floor((stats.dex - 10) / 2) + Math.floor((stats.wis - 10) / 2);
-if (chosenClass === "Barbarian") ac = 10 + Math.floor((stats.dex - 10) / 2) + Math.floor((stats.con - 10) / 2);
-
-const newChar = {
-  name: autoRoll ? "Random Hero" : "New Hero",
-  race: chosenRace, class: chosenClass, level: 1, hp: defaults.hp, maxHp: defaults.hp, ac: ac,
-  speed: 30, vision: "Normal", profession: "Adventurer", stats, traitsList: [], bio: "",
-  campaign: currentCampaign, initiative: 0, conditions: [], xp: 0,
-  proficiencies: profs, inventory: inventory, mount: { name: "", hp: 0, ac: 0, speed: 0 },
-  otherProfs: `Armor: ${defaults.armor}. Languages: Common.`, weapons: (defaults.gear || []).join(', '),
-  knownSpells: knownSpells
-};
-await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'characters'), newChar);
-showNotification("Hero added to " + currentCampaign);
-};
-const updateCharacter = async (id, data) => {
-if (user) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'characters', id), data);
-};
-const deleteCharacter = async (id) => {
-if (user) {
-await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'characters', id));
-showNotification("Deleted");
-}
-};
-const handleCloneCharacter = async () => {
-if (!characterToClone || !targetCampaignForClone || !user) return;
-const { id, ...charDataRest } = characterToClone;
-const clonedChar = { ...charDataRest, name: `${characterToClone.name} (Copy)`, campaign: targetCampaignForClone };
-await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'characters'), clonedChar);
-showNotification(`Cloned to ${targetCampaignForClone}`);
-setCharacterToClone(null);
-};
-const rollDice = async (sides) => {
-if (!user) return;
-const res = Math.floor(Math.random() * sides) + 1;
-await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'dicelog'), {
-roller: "DM", sides, result: res, timestamp: serverTimestamp(), campaign: currentCampaign
-});
-};
-const saveCampaignNotes = async () => {
-if (!user) return;
-const colRef = collection(db, 'artifacts', appId, 'users', user.uid, 'campaigns');
-const dataToSave = { ...campaignNotes, campaignName: currentCampaign };
-if (campaignDocId) await updateDoc(doc(colRef, campaignDocId), dataToSave);
-else await addDoc(colRef, dataToSave);
-showNotification("Notes saved.");
-};
-const generateEncounter = () => {
-if (campaignMode !== "Random") {
-const module = CAMPAIGN_MODULES[campaignMode];
-if (module && module.encounters && module.encounters[campaignIndex]) {
-const encounter = module.encounters[campaignIndex];
-const monsters = encounter.monsters.map(name => MONSTER_MANUAL.find(m => m.name === name)).filter(Boolean);
-setGeneratedEncounter(monsters);
-setEncounterXP(monsters.reduce((acc, m) => acc + m.xp, 0));
-showNotification(`Loaded: ${encounter.name}`);
-return;
-} else {
-showNotification("Campaign Complete!");
-return;
-}
-}
-// Random mode
-const thresholds = XP_THRESHOLDS[encPartyLevel] || [25, 50, 75, 100];
-const budget = thresholds[encDifficulty] * encPartySize;
-setEncounterBudget(budget);
-
-let pool = MONSTER_MANUAL.filter(m => {
-  if (encTheme !== "Any") {
-    const allowed = BIOME_PRESETS[encTheme] || [];
-    if (!allowed.includes(m.name)) return false;
-  }
-  return true;
-});
-
-if (pool.length === 0) { setGeneratedEncounter([]); return; }
-
-let filteredPool = [...pool];
-if (encClusterSize === "Solo") {
-  filteredPool.sort((a, b) => Math.abs(budget - a.xp) - Math.abs(budget - b.xp));
-  setGeneratedEncounter([filteredPool[0]]);
-  setEncounterXP(filteredPool[0].xp);
-  return;
-}
-
-let currentXP = 0;
-let roster = [];
-let attempts = 0;
-while (currentXP < budget && attempts < 100) {
-  attempts++;
-  const m = filteredPool[Math.floor(Math.random() * filteredPool.length)];
-  if (currentXP + m.xp <= budget * 1.2) {
-    roster.push(m);
-    currentXP += m.xp;
-  }
-}
-
-if (roster.length === 0 && filteredPool.length > 0) roster.push(filteredPool[0]);
-
-const summaryMap = {};
-roster.forEach(m => {
-  if (!summaryMap[m.name]) summaryMap[m.name] = { ...m, count: 0 };
-  summaryMap[m.name].count++;
-});
-setGeneratedEncounter(Object.values(summaryMap));
-setEncounterXP(currentXP);
-};
-const startCombat = () => {
-if (generatedEncounter.length === 0) return;
-let combatRoster = [];
-generatedEncounter.forEach(m => {
-const count = m.count || 1;
-for (let i = 0; i < count; i++) {
-const dexMod = Math.floor(((m.stats?.dex || 10) - 10) / 2);
-const initiative = Math.floor(Math.random() * 20) + 1 + dexMod;
-combatRoster.push({
-...m,
-instanceId: `${m.name}-${i}`,
-currentHp: m.hp,
-initiative
-});
-}
-});
-combatRoster.sort((a, b) => b.initiative - a.initiative);
-setActiveCombat(combatRoster);
-setCombatTurn(0);
-showNotification("Combat started! Roll initiative for PCs.");
-};
-const endCombat = () => {
-if (activeCombat) {
-const xpPerPlayer = Math.floor(encounterXP / characters.length);
-characters.forEach(char => {
-updateCharacter(char.id, { xp: (char.xp || 0) + xpPerPlayer });
-});
-showNotification(`Awarded ${xpPerPlayer} XP to each player!`);
-}
-setActiveCombat(null);
-if (campaignMode !== "Random") {
-setCampaignIndex(campaignIndex + 1);
-setGeneratedEncounter([]);
-}
-};
-const updateMonsterHp = (idx, newHp) => {
-const newCombat = [...activeCombat];
-newCombat[idx].currentHp = newHp;
-setActiveCombat(newCombat);
-};
-const removeMonster = (idx) => {
-const newCombat = [...activeCombat];
-newCombat.splice(idx, 1);
-setActiveCombat(newCombat);
-};
-const nextTurn = () => {
-setCombatTurn((combatTurn + 1) % (activeCombat.length + characters.length));
-};
-const handleRest = (type) => {
-characters.forEach(char => {
-const updates = { hp: char.maxHp };
-if (type === 'long') {
-updates.conditions = [];
-}
-updateCharacter(char.id, updates);
-});
-showNotification(`Party took a ${type} rest!`);
-};
-const generateLoot = (tier) => {
-const table = LOOT_TABLES[tier] || LOOT_TABLES.minor;
-const item = table[Math.floor(Math.random() * table.length)];
-showNotification(`Loot: ${item}`);
-return item;
-};
-const generateNPC = () => {
-const gender = Math.random() > 0.5 ? 'male' : 'female';
-const firstName = NPC_NAMES[gender][Math.floor(Math.random() * NPC_NAMES[gender].length)];
-const lastName = NPC_NAMES.surnames[Math.floor(Math.random() * NPC_NAMES.surnames.length)];
-const trait = NPC_TRAITS[Math.floor(Math.random() * NPC_TRAITS.length)];
-return { name: `${firstName} ${lastName}`, trait };
-};
-const generateWeather = () => {
-const w = WEATHER_CONDITIONS[Math.floor(Math.random() * WEATHER_CONDITIONS.length)];
-setWeather(w);
-showNotification(`Weather: ${w.name} - ${w.effect}`);
-};
-const sortInitiative = () => { setSortMode('initiative'); showNotification("Sorted by Initiative"); };
-const sortByName = () => { setSortMode('name'); showNotification("Sorted by Name"); };
-const handleFocusSpells = (char) => {
-setCompendiumType('spells');
-setSpellFilterClass(char.class);
-setSpellFilterSource({ name: char.name, class: char.class });
-setActiveTab('compendium');
-};
-if (loadingAuth) return (
-<div className="h-screen bg-slate-950 text-slate-500 flex items-center justify-center">
-Loading Arcane Script...
-</div>
-);
-if (!user) return <AuthScreen />;
-// Get current campaign module info
-const currentModule = CAMPAIGN_MODULES[campaignMode];
-const currentEncounter = currentModule?.encounters?.[campaignIndex];
-return (
-<div className={`flex flex-col h-screen font-sans ${getBgClass(printerMode)}`}>
-{/* Header */}
-<header className={`p-4 shadow-md flex items-center justify-between z-10 ${getHeaderClass(printerMode)}`}>
-<div className="flex items-center space-x-3">
-<div className={`p-2 rounded-lg ${printerMode ? 'bg-black text-white' : 'bg-amber-600 text-slate-900'}`}>
-<Dices size={24} />
-</div>
-<div>
-<h1 className={`text-xl font-bold leading-none ${printerMode ? 'text-black' : 'text-amber-500'}`}>
-DM's COMPANION
-</h1>
-<button onClick={() => setShowCampaignModal(true)}
-className="flex items-center text-xs opacity-70 hover:opacity-100 mt-1 font-mono">
-{user.isAnonymous ? (
-<Ghost size={10} className="mr-1 text-slate-400" />
-) : (
-<Lock size={10} className="mr-1 text-green-500" />
-)}
-<MapIcon size={12} className="mr-1" /> {currentCampaign}
-<ChevronDown size={12} className="ml-1" />
-</button>
-</div>
-</div>
-<div className="flex items-center space-x-2">
-<button onClick={() => setPrinterMode(!printerMode)}
-className={`p-2 rounded-full ${printerMode ? 'bg-gray-200 text-black' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
-<Printer size={18} />
-</button>
-<button onClick={() => signOut(auth)}
-className="p-2 rounded-full bg-slate-800 text-red-400 hover:bg-red-900/50" title="Sign Out">
-<LogOut size={18} />
-</button>
-</div>
-</header>
-  {notification && (
-    <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-amber-500 text-black px-4 py-2 rounded-full shadow-lg z-50 font-bold text-sm animate-bounce flex items-center">
-      <Info size={16} className="mr-2" /> {notification}
-    </div>
-  )}
-
-  {/* Campaign Modal */}
-  {showCampaignModal && (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-md shadow-2xl">
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center">
-          <MapIcon className="mr-2" /> Select Campaign
-        </h2>
-        <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
-          {campaignList.map(c => (
-            <button key={c}
-              onClick={() => {
-                setCurrentCampaign(c);
-                setShowCampaignModal(false);
-                showNotification(`Loaded ${c}`);
-              }}
-              className={`w-full text-left p-3 rounded flex justify-between items-center transition-colors ${currentCampaign === c ? 'bg-amber-600 text-white font-bold' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}>
-              <span>{c}</span>
-              {currentCampaign === c && <Zap size={16} />}
-            </button>
-          ))}
-        </div>
-        <div className="pt-4 border-t border-slate-700 flex space-x-2">
-          <input className="flex-1 bg-slate-950 border border-slate-600 rounded p-2 text-white"
-            placeholder="New Campaign..." value={newCampaignInput}
-            onChange={e => setNewCampaignInput(e.target.value)} />
-          <button onClick={() => {
-            if (newCampaignInput) {
-              setCampaignList([...campaignList, newCampaignInput]);
-              setCurrentCampaign(newCampaignInput);
-              setNewCampaignInput("");
-              setShowCampaignModal(false);
-            }
-          }} className="bg-green-600 text-white px-4 rounded font-bold hover:bg-green-500">
-            Create
-          </button>
-        </div>
-        <button onClick={() => setShowCampaignModal(false)}
-          className="mt-4 text-slate-500 text-xs w-full text-center hover:text-slate-400">
-          Close
-        </button>
-      </div>
-    </div>
-  )}
-
-  {/* Clone Character Modal */}
-  {characterToClone && (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-sm shadow-2xl">
-        <h3 className="text-lg font-bold text-white mb-2">Extract Player</h3>
-        <p className="text-slate-400 text-sm mb-4">
-          Copy <span className="text-white font-bold">{characterToClone.name}</span> to:
-        </p>
-        <select className="w-full bg-slate-800 border border-slate-600 text-white p-2 rounded mb-4"
-          value={targetCampaignForClone} onChange={e => setTargetCampaignForClone(e.target.value)}>
-          <option value="">Select Campaign...</option>
-          {campaignList.filter(c => c !== currentCampaign).map(c => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        <div className="flex space-x-2">
-          <button onClick={() => setCharacterToClone(null)}
-            className="flex-1 bg-slate-700 text-slate-300 py-2 rounded font-bold hover:bg-slate-600">
-            Cancel
-          </button>
-          <button onClick={handleCloneCharacter} disabled={!targetCampaignForClone}
-            className="flex-1 bg-blue-600 text-white py-2 rounded font-bold disabled:opacity-50 hover:bg-blue-500">
-            Copy
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* Loot Generator Modal */}
-  {showLootGenerator && (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-md shadow-2xl">
-        <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-          <Gift size={20} className="mr-2" /> Loot Generator
-        </h3>
-        <div className="space-y-2">
-          {Object.keys(LOOT_TABLES).map(tier => (
-            <button key={tier}
-              onClick={() => generateLoot(tier)}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-white p-3 rounded flex items-center justify-between">
-              <span className="capitalize font-bold">{tier}</span>
-              <Coins size={16} />
-            </button>
-          ))}
-        </div>
-        <button onClick={() => setShowLootGenerator(false)}
-          className="mt-4 text-slate-500 text-xs w-full text-center">
-          Close
-        </button>
-      </div>
-    </div>
-  )}
-
-  {/* NPC Generator Modal */}
-  {showNPCGenerator && (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl w-full max-w-md shadow-2xl">
-        <h3 className="text-lg font-bold text-white mb-4 flex items-center">
-          <UserX size={20} className="mr-2" /> NPC Generator
-        </h3>
-        <button onClick={() => {
-          const npc = generateNPC();
-          showNotification(`${npc.name}: ${npc.trait}`);
-        }}
-          className="w-full bg-amber-600 hover:bg-amber-500 text-white p-3 rounded font-bold flex items-center justify-center">
-          <Sparkles size={16} className="mr-2" /> Generate Random NPC
-        </button>
-        <button onClick={() => setShowNPCGenerator(false)}
-          className="mt-4 text-slate-500 text-xs w-full text-center">
-          Close
-        </button>
-      </div>
-    </div>
-  )}
-
-  <main className="flex-1 overflow-y-auto p-4 pb-24 custom-scrollbar">
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Party Tab */}
-      {activeTab === 'party' && (
-        <>
-          <div className={`p-4 rounded-xl flex items-center justify-between ${printerMode ? 'bg-gray-100 border border-black' : 'bg-slate-800 border border-slate-700'}`}>
-            <div className="flex items-center space-x-2">
-              <Users className={printerMode ? 'text-black' : 'text-amber-500'} />
-              <div>
-                <h2 className={`font-bold ${printerMode ? 'text-black' : 'text-white'}`}>Party Roster</h2>
-                <div className="text-xs opacity-60">Campaign: {currentCampaign}</div>
-              </div>
-            </div>
-            <div className="flex space-x-2">
-              <button onClick={sortInitiative}
-                className={`px-3 py-1.5 rounded text-sm font-bold flex items-center ${printerMode ? 'bg-white border border-black' : 'bg-indigo-700 text-white hover:bg-indigo-600'}`}
-                title="Sort by Initiative">
-                <ArrowDownAZ size={14} className="mr-1" /> Init
-              </button>
-              <button onClick={() => handleRest('short')}
-                className={`px-3 py-1.5 rounded text-sm font-bold flex items-center ${printerMode ? 'bg-white border border-black' : 'bg-blue-700 text-white hover:bg-blue-600'}`}>
-                <Coffee size={14} className="mr-1" /> Short Rest
-              </button>
-              <button onClick={() => handleRest('long')}
-                className={`px-3 py-1.5 rounded text-sm font-bold flex items-center ${printerMode ? 'bg-white border border-black' : 'bg-purple-700 text-white hover:bg-purple-600'}`}>
-                <Moon size={14} className="mr-1" /> Long Rest
-              </button>
-              <button onClick={() => addCharacter(false)}
-                className={`px-3 py-1.5 rounded text-sm font-bold ${printerMode ? 'bg-white border border-black' : 'bg-slate-700 text-white hover:bg-slate-600'}`}>
-                + Manual
-              </button>
-              <button onClick={() => addCharacter(true)}
-                className={`px-3 py-1.5 rounded text-sm font-bold flex items-center ${getBtnPrimary(printerMode)}`}>
-                <Zap size={14} className="mr-1" /> Auto-Gen
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {characters.map(char => (
-              <CharacterCard key={char.id} char={char} printerMode={printerMode}
-                updateCharacter={updateCharacter} deleteCharacter={deleteCharacter}
-                cloneCharacter={setCharacterToClone} onFocusSpells={handleFocusSpells}
-                onRoll={handleRoll} onGenericRoll={handleGenericRoll} />
-            ))}
-            {characters.length === 0 && (
-              <div className="col-span-full py-12 text-center opacity-50 border-2 border-dashed border-slate-700 rounded-xl">
-                <p>No heroes in this campaign yet.</p>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Encounters Tab */}
-      {activeTab === 'encounters' && activeCombat ? (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-red-900/20 p-3 rounded border border-red-800">
-            <div>
-              <h2 className="text-xl font-bold text-white flex items-center">
-                <Swords className="mr-2" /> Active Combat
-              </h2>
-              <div className="text-xs text-slate-400 mt-1">
-                Turn: {combatTurn + 1} | Total XP: {encounterXP}
-              </div>
-            </div>
-            <div className="flex space-x-2">
-              <button onClick={nextTurn}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold flex items-center">
-                <SkipForward size={16} className="mr-1" /> Next Turn
-              </button>
-              <button onClick={endCombat}
-                className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded font-bold">
-                End Combat
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {activeCombat.map((m, i) => (
-              <ActiveMonsterCard key={i} idx={i} monster={m}
-                onUpdateHP={updateMonsterHp} onRoll={handleRoll} onRemove={removeMonster} />
-            ))}
-          </div>
-        </div>
-      ) : activeTab === 'encounters' ? (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className={`text-2xl font-bold flex items-center ${printerMode ? 'text-black' : 'text-white'}`}>
-              <Swords className="mr-2" /> Encounter Generator
-            </h2>
-            <div className="flex space-x-2">
-              <button onClick={() => setShowLootGenerator(true)}
-                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-sm font-bold flex items-center">
-                <Gift size={14} className="mr-1" /> Loot
-              </button>
-              <button onClick={() => setShowNPCGenerator(true)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-sm font-bold flex items-center">
-                <UserX size={14} className="mr-1" /> NPC
-              </button>
-              <button onClick={generateWeather}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm font-bold flex items-center">
-                <Cloud size={14} className="mr-1" /> Weather
-              </button>
-            </div>
-          </div>
-
-          {weather && (
-            <div className={`p-4 rounded-lg border flex items-center space-x-3 ${printerMode ? 'bg-white border-black' : 'bg-slate-800 border-slate-700'}`}>
-              <weather.icon size={24} className="text-blue-400" />
-              <div>
-                <div className="font-bold">{weather.name}</div>
-                <div className="text-xs opacity-70">{weather.effect}</div>
-              </div>
-            </div>
-          )}
-
-          <div className={`p-6 rounded-xl border ${printerMode ? 'bg-white border-black' : 'bg-slate-800 border-slate-700'}`}>
-            <label className="text-xs uppercase font-bold text-slate-500 mb-2 block">Game Mode</label>
-            <div className="flex gap-2 mb-4">
-              <select className={`flex-1 p-2 rounded ${getInputClass(printerMode)}`}
-                value={campaignMode} onChange={e => { setCampaignMode(e.target.value); setCampaignIndex(0); }}>
-                {Object.keys(CAMPAIGN_MODULES).map(k => (
-                  <option key={k} value={k}>{k}</option>
-                ))}
-              </select>
-              {campaignMode !== "Random" && (
-                <div className={`self-center font-mono text-xs ${printerMode ? 'text-black' : 'text-white'}`}>
-                  Stage: {campaignIndex + 1}/{currentModule?.encounters?.length || 0}
-                </div>
-              )}
-            </div>
-
-            {currentModule?.description && (
-              <div className="mb-4 p-3 bg-amber-900/20 border border-amber-800 rounded text-xs">
-                <strong>Campaign:</strong> {currentModule.description}
-              </div>
-            )}
-
-            {currentEncounter && (
-              <div className="mb-4 p-3 bg-blue-900/20 border border-blue-800 rounded text-xs">
-                <div className="font-bold text-blue-400 mb-1">{currentEncounter.name}</div>
-                <div className="text-slate-300 mb-2">{currentEncounter.text}</div>
-                {currentEncounter.notes && (
-                  <div className="text-slate-400 italic text-[11px]">Note: {currentEncounter.notes}</div>
-                )}
-              </div>
-            )}
-
-            {campaignMode === "Random" && (
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                <div>
-                  <label className="text-xs font-bold uppercase mb-2 opacity-70">Lvl</label>
-                  <input type="number" min="1" max="20" className={`w-full p-2 rounded ${getInputClass(printerMode)}`}
-                    value={encPartyLevel} onChange={e => setEncPartyLevel(parseInt(e.target.value) || 1)} />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase mb-2 opacity-70">Size</label>
-                  <input type="number" min="1" max="10" className={`w-full p-2 rounded ${getInputClass(printerMode)}`}
-                    value={encPartySize} onChange={e => setEncPartySize(parseInt(e.target.value) || 4)} />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase mb-2 opacity-70">Diff</label>
-                  <select className={`w-full p-2 rounded ${getInputClass(printerMode)}`}
-                    value={encDifficulty} onChange={e => setEncDifficulty(parseInt(e.target.value))}>
-                    <option value={0}>Easy</option>
-                    <option value={1}>Medium</option>
-                    <option value={2}>Hard</option>
-                    <option value={3}>Deadly</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase mb-2 opacity-70">Biome</label>
-                  <select className={`w-full p-2 rounded ${getInputClass(printerMode)}`}
-                    value={encTheme} onChange={e => setEncTheme(e.target.value)}>
-                    <option value="Any">Any</option>
-                    <option value="City">City</option>
-                    <option value="Wilderness">Wilderness</option>
-                    <option value="Dungeon">Dungeon</option>
-                    <option value="Crypt">Crypt</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase mb-2 opacity-70">Count</label>
-                  <select className={`w-full p-2 rounded ${getInputClass(printerMode)}`}
-                    value={encClusterSize} onChange={e => setEncClusterSize(e.target.value)}>
-                    <option value="Any">Any</option>
-                    <option value="Solo">Solo Boss</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            <button onClick={generateEncounter}
-              className={`w-full py-3 rounded-lg font-bold text-lg shadow-lg flex items-center justify-center transform transition active:scale-95 ${getBtnPrimary(printerMode)}`}>
-              {campaignMode === "Random" ? "Generate Random Encounter" : "Load Next Scenario"}
-            </button>
-          </div>
-
-          {generatedEncounter.length > 0 && (
-            <div className={`rounded-xl overflow-hidden border ${printerMode ? 'bg-white border-black' : 'bg-slate-900 border-slate-800'}`}>
-              <div className={`p-4 border-b flex justify-between items-center ${printerMode ? 'bg-gray-100 border-black' : 'bg-slate-800 border-slate-700'}`}>
-                <div className="flex flex-col">
-                  <span className="font-bold">Encounter Plan</span>
-                  {currentEncounter && (
-                    <span className="text-xs opacity-70 italic">{currentEncounter.name}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-1 rounded ${printerMode ? 'bg-black text-white' : 'bg-slate-950 text-slate-400'}`}>
-                    Total XP: {encounterXP}
-                  </span>
-                  <button onClick={startCombat}
-                    className="bg-green-600 hover:bg-green-500 text-white px-4 py-1 rounded font-bold flex items-center text-xs">
-                    <Swords size={14} className="mr-1" /> Fight!
+                {/* Point Buy Toggle */}
+                <div className="mb-4">
+                  <button
+                    onClick={() => setShowPointBuyHelper(!showPointBuyHelper)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
+                  >
+                    {showPointBuyHelper ? 'Hide' : 'Show'} Point Buy Helper
                   </button>
                 </div>
-              </div>
-              <div className="p-4 grid grid-cols-1 gap-3">
-                {summarizeEncounter(generatedEncounter).map((m, i) => (
-                  <EncounterMonsterItem key={i} monster={m} printerMode={printerMode} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      ) : null}
 
-      {/* Compendium Tab */}
-      {activeTab === 'compendium' && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className={`text-2xl font-bold flex items-center ${printerMode ? 'text-black' : 'text-white'}`}>
-              <BookOpen className="mr-2" /> Compendium
-            </h2>
-            <div className={`flex rounded-lg overflow-hidden border ${printerMode ? 'border-black' : 'border-slate-700'}`}>
-              <button onClick={() => setCompendiumType('monsters')}
-                className={`px-4 py-1 text-sm font-bold transition-colors ${compendiumType === 'monsters' ? (printerMode ? 'bg-black text-white' : 'bg-amber-500 text-slate-900') : (printerMode ? 'bg-white text-black' : 'bg-slate-900 text-slate-400')
-                  }`}>
-                Monsters
-              </button>
-              <button onClick={() => setCompendiumType('spells')}
-                className={`px-4 py-1 text-sm font-bold transition-colors ${compendiumType === 'spells' ? (printerMode ? 'bg-black text-white' : 'bg-purple-500 text-white') : (printerMode ? 'bg-white text-black' : 'bg-slate-900 text-slate-400')
-                  }`}>
-                Spells
-              </button>
-            </div>
-          </div>
-
-          {compendiumType === 'spells' && (
-            <div className="flex items-center justify-between mb-2 text-xs">
-              <div className="flex items-center gap-1">
-                <Filter size={12} className={printerMode ? 'text-black' : 'text-slate-400'} />
-                <span className="uppercase tracking-wide opacity-70">Class Filter</span>
-              </div>
-              <select value={spellClassFilter} onChange={e => setSpellClassFilter(e.target.value)}
-                className={`text-xs px-2 py-1 rounded ${getInputClass(printerMode)}`} style={{ width: 'auto' }}>
-                <option value="All">All casters</option>
-                {CASTER_CLASSES.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {spellFilterClass && (
-            <div className={`mb-2 px-3 py-2 rounded border text-xs flex items-center justify-between ${printerMode ? 'bg-white border-black text-black' : 'bg-slate-900 border-slate-700 text-slate-200'}`}>
-              <div>Using class filter from <span className="font-bold">{spellFilterSource?.name || "party"} ({spellFilterClass})</span></div>
-              <button type="button" onClick={() => { setSpellFilterClass(null); setSpellFilterSource(null); }}
-                className={`ml-2 px-2 py-1 rounded text-[10px] border ${printerMode ? 'border-black hover:bg-black hover:text-white' : 'border-slate-600 hover:bg-slate-700'}`}>
-                Clear
-              </button>
-            </div>
-          )}
-
-          <div className="relative mb-2">
-            <Search className={`absolute left-3 top-2.5 ${printerMode ? 'text-black' : 'text-slate-500'}`} size={16} />
-            <input type="text" placeholder={`Search ${compendiumType}...`}
-              className={`rounded-full pl-9 pr-4 py-2 text-sm focus:outline-none w-full ${getInputClass(printerMode)}`}
-              value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-          </div>
-
-          {compendiumType === 'spells' && (
-            <div className="flex flex-wrap gap-2 mb-2">
-              <div className="flex items-center gap-1 mb-1 text-[11px] uppercase opacity-70">
-                <Tag size={12} className={printerMode ? 'text-black' : 'text-slate-400'} />
-                <span>Spell Tags</span>
-              </div>
-              <div className="w-full flex flex-wrap gap-2">
-                {SPELL_TAGS.map(tag => (
-                  <button key={tag} onClick={() => setSpellTagFilter(tag)}
-                    className={`px-2 py-1 rounded-full text-xs font-bold border transition-colors ${spellTagFilter === tag ? (printerMode ? 'bg-black text-white border-black' : 'bg-purple-500 text-white border-purple-400') : (printerMode ? 'bg-white text-black border-black' : 'bg-slate-800 text-slate-300 border-slate-600')
-                      }`}>
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-4">
-            {(compendiumType === 'monsters' ? MONSTER_MANUAL : SPELL_COMPENDIUM)
-              .filter(i => {
-                const matchesSearch = i.name.toLowerCase().includes(searchTerm.toLowerCase());
-                if (!matchesSearch) return false;
-                if (compendiumType === 'spells') {
-                  if (spellFilterClass && (!i.classes || !i.classes.includes(spellFilterClass))) return false;
-                  if (spellClassFilter !== "All" && (!i.classes || !i.classes.includes(spellClassFilter))) return false;
-                  if (spellTagFilter !== "All") {
-                    if (!i.tags) return false;
-                    const tagKeyMap = { Damage: "damage", Heal: "heal", Control: "control", Buff: "buff", Utility: "utility" };
-                    const key = tagKeyMap[spellTagFilter];
-                    if (!i.tags.includes(key)) return false;
-                  }
-                }
-                return true;
-              })
-              .map((item, idx) => (
-                <div key={idx} className={`${getCardClass(printerMode)} p-4 rounded-lg`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className={`text-lg font-bold ${printerMode ? 'text-black' : (compendiumType === 'monsters' ? 'text-amber-400' : 'text-purple-400')}`}>
-                        {item.name}
-                      </h3>
-                      <span className={`text-xs italic ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
-                        {item.type || item.school}
-                        {compendiumType === 'spells' && ` • Level ${item.level}`}
-                        {compendiumType === 'monsters' && ` • CR ${item.cr} (${item.xp}xp)`}
+                {/* Point Buy or Simple Stats */}
+                {showPointBuyHelper ? (
+                  <div className="bg-slate-900 border border-purple-500 rounded p-4 mb-4">
+                    <h4 className="font-bold text-purple-400 mb-3">Point Buy (27 points)</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                      {['str', 'dex', 'con', 'int', 'wis', 'cha'].map(stat => (
+                        <div key={stat}>
+                          <label className="text-xs text-slate-400 uppercase mb-1 block">{stat}</label>
+                          <input
+                            type="number"
+                            min="8"
+                            max="15"
+                            value={newCharacter.baseStats[stat]}
+                            onChange={(e) => {
+                              const value = Math.max(8, Math.min(15, parseInt(e.target.value) || 8));
+                              const newBaseStats = { ...newCharacter.baseStats, [stat]: value };
+                              const newStats = applyRacialBonuses(newBaseStats, newCharacter.race);
+                              setNewCharacter({ 
+                                ...newCharacter, 
+                                baseStats: newBaseStats,
+                                stats: newStats
+                              });
+                            }}
+                            className="w-full bg-slate-800 text-white border border-slate-600 rounded px-2 py-1 text-center"
+                          />
+                          <div className="text-xs text-green-400 text-center mt-1">
+                            Final: {newCharacter.stats[stat]}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 text-sm">
+                      <span className={calculatePointsSpent(newCharacter.baseStats) <= 27 ? 'text-green-400' : 'text-red-400'}>
+                        Points: {calculatePointsSpent(newCharacter.baseStats)} / 27
                       </span>
                     </div>
                   </div>
-                  {compendiumType === 'monsters' && (
-                    <div className={`mt-2 text-xs ${printerMode ? 'text-black' : 'text-slate-400'}`}>
-                      {item.stats && <div><span className="font-bold">Stats:</span> {item.stats}</div>}
-                      {item.equipment && <div><span className="font-bold">Gear:</span> {item.equipment}</div>}
-                    </div>
-                  )}
-                  {compendiumType === 'spells' && (
-                    <div className={`mt-2 text-xs ${printerMode ? 'text-black' : 'text-slate-400'}`}>
-                      <div><span className="font-bold">Time:</span> {item.time} • <span className="font-bold">Range:</span> {item.range}</div>
-                      <div><span className="font-bold">Components:</span> {item.components} • <span className="font-bold">Duration:</span> {item.duration}</div>
-                      {item.classes && <div><span className="font-bold">Classes:</span> {item.classes.join(', ')}</div>}
-                    </div>
-                  )}
-                  <div className={`text-sm leading-relaxed mt-2 ${printerMode ? 'text-black' : 'text-slate-300'}`}>
-                    {item.desc || item.actions}
+                ) : (
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {['str', 'dex', 'con', 'int', 'wis', 'cha'].map(stat => (
+                      <div key={stat}>
+                        <label className="text-xs text-slate-400 uppercase mb-1 block">{stat}</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={newCharacter.stats[stat]}
+                          onChange={(e) => setNewCharacter({ 
+                            ...newCharacter, 
+                            stats: { ...newCharacter.stats, [stat]: parseInt(e.target.value) || 10 }
+                          })}
+                          className="w-full bg-slate-900 text-white border border-slate-600 rounded px-2 py-1"
+                        />
+                      </div>
+                    ))}
                   </div>
-                  {item.desc?.match(DICE_REGEX) && (
-                    <button onClick={() => handleRoll("Compendium", `${compendiumType === 'spells' ? 'Cast' : 'Use'} ${item.name}`, 0, item.desc.match(DICE_REGEX)[0])}
-                      className={`mt-2 text-xs px-2 py-1 rounded flex items-center ${compendiumType === 'spells' ? 'bg-purple-700 hover:bg-purple-600' : 'bg-amber-700 hover:bg-amber-600'} text-white`}>
-                      <Dices size={12} className="mr-1" /> Roll ({item.desc.match(DICE_REGEX)[0]})
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={addCharacter}
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded flex items-center gap-2"
+                  >
+                    <Check className="w-5 h-5" />
+                    Create Character
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCharacterForm(false);
+                      setShowPointBuyHelper(false);
+                    }}
+                    className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-6 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Character List */}
+            {characters.length === 0 ? (
+              <div className={`text-center py-12 ${printerMode ? 'bg-gray-100 border border-black' : 'bg-slate-800'} rounded-lg`}>
+                <Users className={`w-16 h-16 ${printerMode ? 'text-gray-400' : 'text-slate-600'} mx-auto mb-4`} />
+                <p className={`${printerMode ? 'text-gray-700' : 'text-slate-400'} text-lg`}>
+                  No characters yet. Create one to begin your adventure!
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {characters.map(char => (
+                  <CharacterCard key={char.id} char={char} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* ========== COMBAT TAB ========== */}
+        {activeTab === 'combat' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className={`text-3xl font-bold ${printerMode ? 'text-black' : 'text-white'}`}>
+                Combat Tracker
+              </h2>
+              {!printerMode && (
+                <button
+                  onClick={() => {
+                    const name = prompt("Encounter name:");
+                    if (name) createEncounter(name, []);
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Encounter
+                </button>
+              )}
+            </div>
+
+            {/* Active Encounter */}
+            {activeEncounter && !printerMode && (
+              <div className="bg-slate-800 border-2 border-red-600 rounded-lg p-6 shadow-xl mb-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-2">{activeEncounter.name}</h3>
+                    <p className="text-slate-400">
+                      Round {activeEncounter.round} • 
+                      {activeEncounter.participants[activeEncounter.currentTurn]?.name}'s Turn
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={nextTurn}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+                    >
+                      Next Turn
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={endEncounter}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                    >
+                      End Combat
+                    </button>
+                  </div>
+                </div>
+
+                {/* Initiative Order */}
+                <div className="space-y-2 mb-6">
+                  {activeEncounter.participants.map((participant, idx) => (
+                    <div
+                      key={participant.id}
+                      className={`p-4 rounded ${
+                        idx === activeEncounter.currentTurn
+                          ? 'bg-amber-600 border-2 border-amber-400'
+                          : participant.isPlayer
+                          ? 'bg-blue-900 border border-blue-700'
+                          : 'bg-red-900 border border-red-700'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl font-bold text-white">
+                              {participant.initiative}
+                            </span>
+                            <div>
+                              <h4 className="font-bold text-white text-lg">
+                                {participant.name}
+                                {participant.isPlayer && (
+                                  <span className="ml-2 text-xs text-blue-300">
+                                    ({participant.class} {participant.level})
+                                  </span>
+                                )}
+                              </h4>
+                              <p className="text-sm text-slate-300">
+                                AC {participant.ac} • HP: {participant.currentHp}/{participant.maxHp}
+                              </p>
+                              {participant.conditions && participant.conditions.length > 0 && (
+                                <div className="flex gap-1 mt-1">
+                                  {participant.conditions.map((condition, cidx) => (
+                                    <span
+                                      key={cidx}
+                                      className="bg-yellow-600 text-white px-2 py-0.5 rounded text-xs"
+                                    >
+                                      {condition}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              const dmg = prompt("Damage amount:");
+                              if (dmg) damageParticipant(participant.id, parseInt(dmg));
+                            }}
+                            className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Damage
+                          </button>
+                          <button
+                            onClick={() => {
+                              const heal = prompt("Healing amount:");
+                              if (heal) healParticipant(participant.id, parseInt(heal));
+                            }}
+                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Heal
+                          </button>
+                          <button
+                            onClick={() => {
+                              const condition = prompt("Add condition (e.g., Poisoned, Stunned):");
+                              if (condition) addCondition(participant.id, condition);
+                            }}
+                            className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm"
+                          >
+                            +Condition
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Combat Log */}
+                <div className="bg-slate-900 rounded p-4 max-h-64 overflow-y-auto">
+                  <h4 className="font-bold text-amber-400 mb-2">Combat Log</h4>
+                  <div className="space-y-1">
+                    {activeEncounter.log.slice().reverse().map((entry, idx) => (
+                      <p key={idx} className="text-sm text-slate-300">
+                        {entry}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Saved Encounters */}
+            <div>
+              <h3 className={`text-xl font-bold mb-4 ${printerMode ? 'text-black' : 'text-white'}`}>
+                Saved Encounters
+              </h3>
+              {encounters.length === 0 ? (
+                <div className={`text-center py-12 ${printerMode ? 'bg-gray-100 border border-black' : 'bg-slate-800'} rounded-lg`}>
+                  <Swords className={`w-16 h-16 ${printerMode ? 'text-gray-400' : 'text-slate-600'} mx-auto mb-4`} />
+                  <p className={`${printerMode ? 'text-gray-700' : 'text-slate-400'} text-lg`}>
+                    No encounters saved yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {encounters.map(enc => (
+                    <div
+                      key={enc.id}
+                      className={`${printerMode ? 'bg-white border-2 border-black' : 'bg-slate-800 border border-amber-700'} rounded-lg p-4`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className={`font-bold text-lg ${printerMode ? 'text-black' : 'text-white'}`}>
+                            {enc.name}
+                          </h4>
+                          <p className={`text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
+                            {enc.participants.length} participants
+                          </p>
+                        </div>
+                        {!printerMode && (
+                          <div className="flex gap-2">
+                            {!enc.isActive && (
+                              <button
+                                onClick={() => startEncounter(enc)}
+                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+                              >
+                                Start
+                              </button>
+                            )}
+                            <button
+                              onClick={() => deleteEncounter(enc.id)}
+                              className="bg-red-600 hover:bg-red-700 text-white p-2 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {enc.participants.map(p => (
+                          <span
+                            key={p.id}
+                            className={`${
+                              p.isPlayer
+                                ? (printerMode ? 'bg-blue-100 text-blue-900 border border-blue-300' : 'bg-blue-900 text-blue-300')
+                                : (printerMode ? 'bg-red-100 text-red-900 border border-red-300' : 'bg-red-900 text-red-300')
+                            } px-2 py-1 rounded text-xs`}
+                          >
+                            {p.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ========== DICE ROLLER TAB ========== */}
+        {activeTab === 'dice' && (
+          <div>
+            <h2 className={`text-3xl font-bold mb-6 ${printerMode ? 'text-black' : 'text-white'}`}>
+              Dice Roller
+            </h2>
+
+            {/* Quick Dice Buttons */}
+            {!printerMode && (
+              <div className="bg-slate-800 border border-amber-700 rounded-lg p-6 shadow-xl mb-6">
+                <h3 className="text-xl font-bold text-white mb-4">Quick Rolls</h3>
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  <DiceButton notation="1d4" label="d4" size="large" />
+                  <DiceButton notation="1d6" label="d6" size="large" />
+                  <DiceButton notation="1d8" label="d8" size="large" />
+                  <DiceButton notation="1d10" label="d10" size="large" />
+                  <DiceButton notation="1d12" label="d12" size="large" />
+                  <DiceButton notation="1d20" label="d20" size="large" />
+                  <DiceButton notation="1d100" label="d100" size="large" />
+                  <DiceButton notation="2d6" label="2d6" size="large" />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <DiceButton notation="2d20" label="Advantage (2d20)" />
+                  <DiceButton notation="3d6" label="3d6" />
+                  <DiceButton notation="4d6" label="4d6" />
+                  <DiceButton notation="8d6" label="8d6 (Fireball)" />
+                  <DiceButton notation="1d20+5" label="d20+5" />
+                  <DiceButton notation="2d8+3" label="2d8+3" />
+                </div>
+
+                {/* Custom Roll */}
+                <div className="mt-4 pt-4 border-t border-slate-700">
+                  <h4 className="text-sm font-bold text-amber-400 mb-2">Custom Roll</h4>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g., 2d20+5"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          rollDice(e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                      className="flex-1 bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    />
+                    <button
+                      onClick={(e) => {
+                        const input = e.target.previousSibling;
+                        if (input.value) {
+                          rollDice(input.value);
+                          input.value = '';
+                        }
+                      }}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded"
+                    >
+                      Roll
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Recent Results */}
+            {!printerMode && diceResults.length > 0 && (
+              <div className="bg-slate-800 border border-amber-700 rounded-lg p-6 shadow-xl mb-6">
+                <h3 className="text-xl font-bold text-white mb-4">Recent Results</h3>
+                <div className="space-y-3">
+                  {diceResults.map((result, idx) => (
+                    <div key={idx} className="bg-slate-900 rounded p-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-slate-400 text-sm">{result.label || result.notation}</span>
+                        <span className={`text-3xl font-bold ${
+                          result.isCrit ? 'text-green-400' : result.isFail ? 'text-red-400' : 'text-amber-400'
+                        }`}>
+                          {result.total}
+                          {result.isCrit && ' ✨'}
+                          {result.isFail && ' 💀'}
+                        </span>
+                      </div>
+                      <div className="flex gap-2 text-sm text-slate-300">
+                        <span>Rolls: [{result.rolls.join(', ')}]</span>
+                        {result.modifier !== 0 && (
+                          <span>
+                            Modifier: {result.modifier >= 0 ? '+' : ''}{result.modifier}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Dice History */}
+            {!printerMode && diceHistory.length > 0 && (
+              <div className="bg-slate-800 border border-amber-700 rounded-lg p-6 shadow-xl">
+                <h3 className="text-xl font-bold text-white mb-4">Roll History</h3>
+                <div className="max-h-96 overflow-y-auto space-y-2">
+                  {diceHistory.map((result, idx) => (
+                    <div key={idx} className="bg-slate-900 rounded p-2 flex justify-between items-center">
+                      <span className="text-sm text-slate-400">
+                        {result.label || result.notation}
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-slate-500">
+                          [{result.rolls.join(', ')}]
+                        </span>
+                        <span className="font-bold text-amber-400">
+                          {result.total}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========== COMPENDIUM TAB ========== */}
+        {activeTab === 'compendium' && (
+          <div>
+            <h2 className={`text-3xl font-bold mb-6 ${printerMode ? 'text-black' : 'text-white'}`}>
+              Compendium
+            </h2>
+
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => setShowMonsterManual(!showMonsterManual)}
+                className={`px-4 py-2 rounded font-semibold ${
+                  showMonsterManual
+                    ? 'bg-amber-600 text-white'
+                    : (printerMode ? 'bg-gray-200 text-black border border-black' : 'bg-slate-700 text-slate-300')
+                }`}
+              >
+                Monster Manual
+              </button>
+              <button
+                onClick={() => setShowSpellCompendium(!showSpellCompendium)}
+                className={`px-4 py-2 rounded font-semibold ${
+                  showSpellCompendium
+                    ? 'bg-amber-600 text-white'
+                    : (printerMode ? 'bg-gray-200 text-black border border-black' : 'bg-slate-700 text-slate-300')
+                }`}
+              >
+                Spell Compendium
+              </button>
+            </div>
+
+            {/* Monster Manual */}
+            {showMonsterManual && (
+              <div className={`${printerMode ? 'bg-white border-2 border-black' : 'bg-slate-800 border border-amber-700'} rounded-lg p-6 shadow-xl mb-6`}>
+                <h3 className={`text-2xl font-bold mb-4 ${printerMode ? 'text-black' : 'text-white'}`}>
+                  Monster Manual ({MONSTER_MANUAL.length} creatures)
+                </h3>
+                
+                {!printerMode && (
+                  <input
+                    type="text"
+                    placeholder="Search monsters..."
+                    value={monsterFilter}
+                    onChange={(e) => setMonsterFilter(e.target.value)}
+                    className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2 mb-4"
+                  />
+                )}
+
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {MONSTER_MANUAL
+                    .filter(monster => 
+                      monster.name.toLowerCase().includes(monsterFilter.toLowerCase()) ||
+                      monster.type.toLowerCase().includes(monsterFilter.toLowerCase())
+                    )
+                    .map((monster, idx) => (
+                      <div key={idx} className={`${printerMode ? 'border border-black' : 'bg-slate-900'} rounded p-4`}>
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className={`font-bold text-lg ${printerMode ? 'text-black' : 'text-amber-400'}`}>
+                              {monster.name}
+                            </h4>
+                            <p className={`text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
+                              {monster.type} • CR {monster.cr} ({monster.xp} XP)
+                            </p>
+                          </div>
+                        </div>
+                        <div className={`grid grid-cols-3 gap-2 mb-2 text-sm ${printerMode ? 'text-black' : 'text-white'}`}>
+                          <div>HP: {monster.hp}</div>
+                          <div>AC: {monster.ac}</div>
+                          <div>Equipment: {monster.equipment}</div>
+                        </div>
+                        <div className={`text-xs ${printerMode ? 'text-gray-700' : 'text-slate-400'} mb-2`}>
+                          {monster.stats}
+                        </div>
+                        <div className={`text-sm ${printerMode ? 'text-black' : 'text-slate-300'}`}>
+                          <span className="font-semibold">Actions:</span> {monster.actions}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Spell Compendium */}
+            {showSpellCompendium && (
+              <div className={`${printerMode ? 'bg-white border-2 border-black' : 'bg-slate-800 border border-amber-700'} rounded-lg p-6 shadow-xl`}>
+                <h3 className={`text-2xl font-bold mb-4 ${printerMode ? 'text-black' : 'text-white'}`}>
+                  Spell Compendium ({SPELL_COMPENDIUM.length} spells)
+                </h3>
+                
+                {!printerMode && (
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <input
+                      type="text"
+                      placeholder="Search spells..."
+                      value={spellFilter}
+                      onChange={(e) => setSpellFilter(e.target.value)}
+                      className="bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    />
+                    <select
+                      value={spellLevelFilter}
+                      onChange={(e) => setSpellLevelFilter(e.target.value)}
+                      className="bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    >
+                      <option value="all">All Levels</option>
+                      <option value="0">Cantrips</option>
+                      {[1,2,3,4,5,6,7,8,9].map(lvl => (
+                        <option key={lvl} value={lvl}>Level {lvl}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={spellClassFilter}
+                      onChange={(e) => setSpellClassFilter(e.target.value)}
+                      className="bg-slate-900 text-white border border-slate-600 rounded px-3 py-2"
+                    >
+                      <option value="all">All Classes</option>
+                      {CLASSES.filter(c => isSpellcaster(c)).map(cls => (
+                        <option key={cls} value={cls}>{cls}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {SPELL_COMPENDIUM
+                    .filter(spell => 
+                      spell.name.toLowerCase().includes(spellFilter.toLowerCase()) ||
+                      spell.description.toLowerCase().includes(spellFilter.toLowerCase())
+                    )
+                    .filter(spell => spellLevelFilter === 'all' || spell.level === parseInt(spellLevelFilter))
+                    .filter(spell => spellClassFilter === 'all' || spell.classes.includes(spellClassFilter))
+                    .map((spell, idx) => (
+                      <div key={idx} className={`${printerMode ? 'border border-black' : 'bg-slate-900'} rounded p-4`}>
+                        <h4 className={`font-bold ${printerMode ? 'text-black' : 'text-purple-400'} mb-1`}>
+                          {spell.name}
+                          <span className={`ml-2 text-sm ${printerMode ? 'text-gray-600' : 'text-slate-400'}`}>
+                            {spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`}
+                          </span>
+                        </h4>
+                        <p className={`text-xs ${printerMode ? 'text-gray-600' : 'text-slate-400'} mb-2`}>
+                          {spell.school} • {spell.castingTime} • Range: {spell.range}
+                        </p>
+                        <p className={`text-sm ${printerMode ? 'text-black' : 'text-slate-300'} mb-2`}>
+                          {spell.description}
+                        </p>
+                        <div className={`text-xs ${printerMode ? 'text-gray-600' : 'text-slate-500'}`}>
+                          Components: {spell.components} • Duration: {spell.duration}
+                        </div>
+                        <div className={`text-xs ${printerMode ? 'text-gray-600' : 'text-slate-500'} mt-1`}>
+                          Classes: {spell.classes.join(', ')}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {/* ========== NOTES TAB ========== */}
+        {activeTab === 'notes' && (
+          <div>
+            <h2 className={`text-3xl font-bold mb-6 ${printerMode ? 'text-black' : 'text-white'}`}>
+              Campaign Notes
+            </h2>
+
+            {/* Note Editor */}
+            {!printerMode && (
+              <div className="bg-slate-800 border border-amber-700 rounded-lg p-6 shadow-xl mb-6">
+                <h3 className="text-xl font-bold text-white mb-4">
+                  {editingNoteId ? 'Edit Note' : 'New Note'}
+                </h3>
+                
+                <input
+                  type="text"
+                  placeholder="Note title..."
+                  value={noteTitle}
+                  onChange={(e) => setNoteTitle(e.target.value)}
+                  className="w-full bg-slate-900 text-white border border-slate-600 rounded px-3 py-2 mb-3"
+                />
+
+                <textarea
+                  placeholder="Write your notes here... Track NPCs, plot hooks, quest details, session summaries..."
+                  value={currentNote}
+                  onChange={(e) => setCurrentNote(e.target.value)}
+                  className="w-full h-64 bg-slate-900 text-white border border-slate-600 rounded px-3 py-2 mb-3 resize-y"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveNote}
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded flex items-center gap-2"
+                  >
+                    <Save className="w-5 h-5" />
+                    {editingNoteId ? 'Update Note' : 'Save Note'}
+                  </button>
+                  {editingNoteId && (
+                    <button
+                      onClick={() => {
+                        setNoteTitle("");
+                        setCurrentNote("");
+                        setEditingNoteId(null);
+                      }}
+                      className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 px-6 rounded"
+                    >
+                      Cancel
                     </button>
                   )}
                 </div>
-              ))}
-          </div>
-        </div>
-      )}
-
-      {/* Notes Tab */}
-      {activeTab === 'notes' && (
-        <div className="h-full flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className={`text-2xl font-bold flex items-center ${printerMode ? 'text-black' : 'text-white'}`}>
-              <Scroll className="mr-2" /> Notes: {currentCampaign}
-            </h2>
-            <button onClick={saveCampaignNotes}
-              className={`flex items-center px-4 py-2 rounded-lg text-sm font-bold shadow-md ${getBtnPrimary(printerMode)}`}>
-              <Save size={16} className="mr-2" /> Save
-            </button>
-          </div>
-          <div className={`rounded-lg shadow-xl overflow-hidden flex-1 flex flex-col relative ${printerMode ? 'bg-white border-2 border-black text-black' : 'bg-yellow-50 text-slate-800'}`}>
-            {!printerMode && (
-              <div className="h-full w-full absolute top-0 left-0 pointer-events-none opacity-10 bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')]"></div>
+              </div>
             )}
-            <input type="text" placeholder="Title..."
-              className="bg-transparent w-full p-4 text-2xl font-serif font-bold border-b border-opacity-20 border-black focus:outline-none z-10"
-              value={campaignNotes.title}
-              onChange={(e) => setCampaignNotes({ ...campaignNotes, title: e.target.value })} />
-            <textarea
-              className="flex-1 w-full bg-transparent p-4 font-serif text-lg leading-relaxed focus:outline-none resize-none z-10"
-              placeholder="Adventure log..."
-              value={campaignNotes.content}
-              onChange={(e) => setCampaignNotes({ ...campaignNotes, content: e.target.value })}></textarea>
-          </div>
-        </div>
-      )}
 
-      {/* Dice Tab */}
-      {activeTab === 'dice' && (
-        <div className="space-y-4">
-          <h2 className={`text-2xl font-bold flex items-center ${printerMode ? 'text-black' : 'text-white'}`}>
-            <Dices className="mr-2" /> Dice Roller
-          </h2>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
-            {[4, 6, 8, 10, 12, 20].map(s => (
-              <button key={s} onClick={() => rollDice(s)}
-                className={`aspect-square rounded-xl flex flex-col items-center justify-center shadow-lg transition-transform active:scale-95 ${printerMode ? 'bg-white border-2 border-black hover:bg-gray-100' : 'bg-slate-800 border border-slate-700 hover:bg-indigo-600'
-                  }`}>
-                <Dices size={32} className={printerMode ? 'text-black' : 'text-white'} />
-                <span className={`text-2xl font-bold mt-2 ${printerMode ? 'text-black' : 'text-white'}`}>d{s}</span>
-              </button>
-            ))}
-          </div>
-          <div className={`rounded-xl p-4 mt-4 h-96 overflow-y-auto custom-scrollbar ${printerMode ? 'bg-gray-100 border-black' : 'bg-slate-900 border border-slate-800'}`}>
-            <h3 className="text-xs font-bold uppercase opacity-50 mb-2">Unified Roll Log</h3>
-            {diceLog.map(l => (
-              <div key={l.id} className={`flex justify-between items-center py-2 border-b ${printerMode ? 'border-gray-300' : 'border-slate-800'}`}>
-                <div className="flex-1">
-                  <div className="text-sm font-bold">{l.roller}</div>
-                  <div className="text-xs opacity-70">{l.detail}</div>
+            {/* Saved Notes */}
+            <div>
+              <h3 className={`text-xl font-bold mb-4 ${printerMode ? 'text-black' : 'text-white'}`}>
+                Saved Notes ({notes.length})
+              </h3>
+              
+              {notes.length === 0 ? (
+                <div className={`text-center py-12 ${printerMode ? 'bg-gray-100 border border-black' : 'bg-slate-800'} rounded-lg`}>
+                  <FileText className={`w-16 h-16 ${printerMode ? 'text-gray-400' : 'text-slate-600'} mx-auto mb-4`} />
+                  <p className={`${printerMode ? 'text-gray-700' : 'text-slate-400'} text-lg`}>
+                    No notes yet. Start writing to track your campaign!
+                  </p>
                 </div>
-                {l.result > 0 && (
-                  <span className={`font-bold text-lg ${l.result === 20 ? 'text-amber-500' : l.result === 1 ? 'text-red-500' : ''}`}>
-                    {l.result}
-                  </span>
-                )}
-              </div>
-            ))}
+              ) : (
+                <div className="grid gap-4">
+                  {notes.map(note => (
+                    <div
+                      key={note.id}
+                      className={`${printerMode ? 'bg-white border-2 border-black' : 'bg-slate-800 border border-amber-700'} rounded-lg p-6 shadow-xl`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <h4 className={`font-bold text-xl mb-2 ${printerMode ? 'text-black' : 'text-white'}`}>
+                            {note.title}
+                          </h4>
+                          <p className={`text-xs ${printerMode ? 'text-gray-600' : 'text-slate-400'} mb-3`}>
+                            Created: {new Date(note.createdAt).toLocaleString()}
+                            {note.updatedAt !== note.createdAt && (
+                              <span className="ml-2">
+                                • Updated: {new Date(note.updatedAt).toLocaleString()}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        {!printerMode && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => editNote(note)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => deleteNote(note.id)}
+                              className="bg-red-600 hover:bg-red-700 text-white p-2 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className={`${printerMode ? 'text-black' : 'text-slate-300'} whitespace-pre-wrap`}>
+                        {note.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
 
-      {/* Rules Tab */}
-      {activeTab === 'rules' && (
-        <div className="space-y-6">
-          <h2 className={`text-2xl font-bold flex items-center ${printerMode ? 'text-black' : 'text-white'}`}>
-            <BookOpen className="mr-2" /> Rules Reference
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`p-4 rounded-lg border ${printerMode ? 'bg-white border-black' : 'bg-slate-800 border-slate-700'}`}>
-              <h3 className={`font-bold mb-3 border-b pb-2 flex items-center ${printerMode ? 'text-black border-black' : 'text-white border-slate-600'}`}>
-                <Skull size={16} className="mr-2" /> Conditions
-              </h3>
-              <div className="space-y-3 h-64 overflow-y-auto custom-scrollbar pr-2">
-                {RULES_SRD.conditions.map((r, i) => (
-                  <div key={i}>
-                    <span className={`font-bold text-sm ${printerMode ? 'text-black' : 'text-amber-400'}`}>{r.title}: </span>
-                    <span className="text-sm opacity-80">{r.text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={`p-4 rounded-lg border ${printerMode ? 'bg-white border-black' : 'bg-slate-800 border-slate-700'}`}>
-              <h3 className={`font-bold mb-3 border-b pb-2 flex items-center ${printerMode ? 'text-black border-black' : 'text-white border-slate-600'}`}>
-                <Flame size={16} className="mr-2" /> Saves & Magic
-              </h3>
-              <div className="space-y-2 h-64 overflow-y-auto custom-scrollbar pr-2">
-                {RULES_SRD.saves.map((r, i) => (
-                  <div key={i} className="text-sm pl-2 border-l border-slate-600 mt-1">
-                    <span className={`font-bold ${printerMode ? 'text-black' : 'text-blue-400'}`}>{r.title}</span>
-                    <span className="opacity-80 text-xs"> - {r.text}</span>
-                  </div>
-                ))}
-                {RULES_SRD.magic.map((r, i) => (
-                  <div key={i} className="text-sm pl-2 border-l border-slate-600 mt-1">
-                    <span className={`font-bold ${printerMode ? 'text-black' : 'text-purple-400'}`}>{r.title}</span>
-                    <span className="opacity-80 text-xs"> - {r.text}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={`p-4 rounded-lg border ${printerMode ? 'bg-white border-black' : 'bg-slate-800 border-slate-700'}`}>
-              <h3 className={`font-bold mb-3 border-b pb-2 flex items-center ${printerMode ? 'text-black border-black' : 'text-white border-slate-600'}`}>
-                <Brain size={16} className="mr-2" /> Basics
-              </h3>
-              <div className="space-y-2 h-64 overflow-y-auto custom-scrollbar pr-2">
-                {RULES_SRD.basics.map((r, i) => (
-                  <div key={i} className="text-sm">
-                    <div className={printerMode ? 'font-bold text-black' : 'font-bold text-emerald-400'}>{r.title}</div>
-                    <div className="opacity-80 text-xs">{r.text}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+      {/* ========== PRINT MODE FOOTER ========== */}
+      {printerMode && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-black p-4 text-center print:hidden">
+          <button
+            onClick={() => window.print()}
+            className="bg-black text-white px-6 py-3 rounded font-bold mr-3"
+          >
+            Print / Save as PDF
+          </button>
+          <button
+            onClick={() => setPrinterMode(false)}
+            className="bg-gray-600 text-white px-6 py-3 rounded font-bold"
+          >
+            Exit Print Mode
+          </button>
         </div>
       )}
     </div>
-  </main>
-
-  {/* Bottom Navigation */}
-  <nav className={`safe-area-bottom ${printerMode ? 'bg-gray-100 border-t-2 border-black' : 'bg-slate-900 border-t border-slate-800'}`}>
-    <div className="max-w-md mx-auto flex justify-around p-2">
-      {[
-        { id: 'party', icon: Users, label: 'Party' },
-        { id: 'encounters', icon: Swords, label: 'Battle' },
-        { id: 'dice', icon: Dices, label: 'Dice' },
-        { id: 'compendium', icon: Skull, label: 'Data' },
-        { id: 'notes', icon: Scroll, label: 'Notes' },
-        { id: 'rules', icon: BookOpen, label: 'Rules' },
-      ].map(t => (
-        <button key={t.id} onClick={() => setActiveTab(t.id)}
-          className={`flex flex-col items-center p-2 rounded w-12 transition-colors ${activeTab === t.id ? (printerMode ? 'bg-gray-300 text-black' : 'bg-slate-800 text-amber-500') : 'opacity-50 hover:opacity-75'
-            }`}>
-          <t.icon size={20} />
-          <span className="text-[9px] mt-1 font-bold">{t.label}</span>
-        </button>
-      ))}
-    </div>
-  </nav>
-
-  <style jsx>{`
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: rgba(15, 23, 42, 0.3);
-      border-radius: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: rgba(100, 116, 139, 0.5);
-      border-radius: 4px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: rgba(100, 116, 139, 0.7);
-    }
-  `}</style>
-</div>
-);
+  );
 }
+
+// ========== EXPORT ==========
+export default App;
